@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenUIL</title>
+    <script>
+      (function () {
+        try {
+          var k = "openuil-theme";
+          var s = localStorage.getItem(k);
+          var mode = s === "light" || s === "dark" ? s : "dark";
+          document.documentElement.setAttribute("data-theme", mode);
+        } catch (e) {}
+      })();
+    </script>
+    <script>
+      tailwind.config = {
+        darkMode: ["selector", '[data-theme="dark"]'],
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        font-family: "Inter", sans-serif;
+      }
+      [data-theme="light"] {
+        color-scheme: light;
+        /* Solid fill for overscroll / rubber-band (gradient is viewport-fixed). */
+        --page-bg-solid: #fed7aa;
+        --page-bg: linear-gradient(
+          135deg,
+          #fff7ed 0%,
+          #ffedd5 42%,
+          #fed7aa 100%
+        );
+        --nav-bg: linear-gradient(
+          180deg,
+          rgba(255, 247, 237, 0.98) 0%,
+          rgba(255, 237, 213, 0.96) 100%
+        );
+        --nav-border: rgba(194, 65, 12, 0.28);
+        --nav-shadow: 0 1px 12px rgba(194, 65, 12, 0.08);
+        --scrollbar-track: rgba(194, 65, 12, 0.06);
+        --scrollbar-thumb: rgba(194, 65, 12, 0.22);
+        --table-header-bg: rgba(255, 237, 213, 0.98);
+        --table-header-fg: #1c1917;
+        --results-well-bg: rgba(250, 250, 249, 0.97);
+        --accent-orange: #ea580c;
+        --accent-orange-muted: #9a3412;
+        --ui-primary: #c2410c;
+        --ui-primary-hover: #9a3412;
+        --body-fg: #1c1917;
+        --muted-fg: #78350f;
+      }
+      [data-theme="dark"] {
+        color-scheme: dark;
+        --page-bg-solid: #2d2d2d;
+        --page-bg: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        --nav-bg: linear-gradient(
+          180deg,
+          rgba(26, 26, 26, 0.96) 0%,
+          rgba(45, 45, 45, 0.94) 100%
+        );
+        --nav-border: rgba(255, 255, 255, 0.1);
+        --nav-shadow: 0 1px 16px rgba(0, 0, 0, 0.25);
+        --scrollbar-track: rgba(255, 255, 255, 0.1);
+        --scrollbar-thumb: rgba(255, 255, 255, 0.3);
+        --table-header-bg: rgba(30, 58, 95, 0.98);
+        --table-header-fg: #f8fafc;
+        --results-well-bg: rgba(255, 255, 255, 0.05);
+        --search-summary-fg: #7dd3fc;
+      }
+      html {
+        min-height: 100%;
+        min-height: 100dvh;
+        background-color: var(--page-bg-solid);
+        background-image: var(--page-bg);
+        background-attachment: fixed;
+        background-repeat: no-repeat;
+      }
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+        padding-top: 140px;
+        background-color: transparent;
+      }
+      .glass {
+        border-radius: 16px;
+      }
+      [data-theme="light"] .glass {
+        background: rgba(255, 252, 248, 0.96);
+        border: 1px solid rgba(194, 65, 12, 0.1);
+        box-shadow: 0 8px 32px rgba(194, 65, 12, 0.06);
+      }
+      [data-theme="dark"] .glass {
+        background: #3f3f46;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      }
+      .glass-dark {
+        backdrop-filter: blur(10px);
+        border-radius: 16px;
+      }
+      [data-theme="light"] .glass-dark {
+        background: #f1f0ed;
+        border: 1px solid rgba(120, 113, 108, 0.12);
+        box-shadow: 0 4px 24px rgba(28, 25, 23, 0.04);
+      }
+      [data-theme="dark"] .glass-dark {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .results-container {
+        max-height: 500px;
+        overflow-y: auto;
+        overflow-x: auto;
+      }
+      .results-container::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .results-container::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+      }
+      .results-container::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 4px;
+      }
+      table {
+        font-size: 14px;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      th {
+        padding: 12px 10px;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        background: var(--table-header-bg);
+        color: var(--table-header-fg);
+        z-index: 10;
+      }
+      td {
+        padding: 10px 10px;
+        white-space: nowrap;
+      }
+      .sort-btn {
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+      }
+      .sort-btn:hover {
+        opacity: 1;
+      }
+      .sort-btn.active {
+        opacity: 1;
+        color: #c2410c;
+      }
+      [data-theme="dark"] .sort-btn.active {
+        color: #38bdf8;
+      }
+      .missing-alert {
+        max-width: 500px;
+        margin: 0 auto;
+      }
+      [data-theme="light"] .missing-alert {
+        background: rgba(14, 165, 233, 0.12);
+        border: 1px solid rgba(14, 165, 233, 0.35);
+        color: #0c4a6e;
+      }
+      [data-theme="dark"] .missing-alert {
+        background: rgba(56, 189, 248, 0.2);
+        border: 1px solid rgba(56, 189, 248, 0.4);
+        color: #e0f2fe;
+      }
+      .no-team-alert {
+        max-width: 500px;
+        margin: 0 auto;
+      }
+      [data-theme="light"] .no-team-alert {
+        background: rgba(251, 146, 60, 0.2);
+        border: 1px solid rgba(234, 88, 12, 0.35);
+        color: #9a3412;
+      }
+      [data-theme="dark"] .no-team-alert {
+        background: rgba(255, 160, 122, 0.95);
+        color: #1a1a1a;
+      }
+      .no-data-alert {
+        max-width: 500px;
+        margin: 0 auto;
+      }
+      [data-theme="light"] .no-data-alert {
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(220, 38, 38, 0.35);
+        color: #991b1b;
+      }
+      [data-theme="dark"] .no-data-alert {
+        background: rgba(255, 100, 100, 0.9);
+        color: #fff;
+      }
+      .members-cell {
+        font-size: 13px;
+        white-space: normal;
+        max-width: 220px;
+        line-height: 1.5;
+      }
+      .menu-btn {
+        padding: 8px clamp(10px, 2vw, 20px);
+        font-weight: 600;
+        border-radius: 8px;
+        transition: all 0.2s;
+        font-size: clamp(0.75rem, 1.5vw, 0.875rem);
+      }
+      .menu-btn.active {
+        background: #38bdf8;
+        color: #0c4a6e;
+      }
+      [data-theme="light"] .menu-btn.active {
+        background: var(--ui-primary, #52525b);
+        color: #fafafa;
+      }
+      [data-theme="light"] .menu-btn.active:hover {
+        background: var(--ui-primary-hover, #3f3f46);
+        color: #fff;
+      }
+      [data-theme="light"] .menu-btn:not(.active) {
+        background: transparent;
+        color: #1c1917;
+      }
+      [data-theme="light"] .menu-btn:not(.active):hover {
+        background: rgba(194, 65, 12, 0.15);
+        color: #0c0a09;
+      }
+      [data-theme="dark"] .menu-btn:not(.active) {
+        background: transparent;
+        color: #e5e7eb;
+      }
+      [data-theme="dark"] .menu-btn:not(.active):hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+      }
+      .year-nav-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        font-size: 20px;
+        font-weight: bold;
+        border: none;
+      }
+      .year-nav-btn:not(:disabled) {
+        background: #38bdf8;
+        color: #0c4a6e;
+        cursor: pointer;
+      }
+      .year-nav-btn:not(:disabled):hover {
+        background: #0ea5e9;
+      }
+      [data-theme="light"] .year-nav-btn:not(:disabled) {
+        background: var(--ui-primary, #52525b);
+        color: #fafafa;
+      }
+      [data-theme="light"] .year-nav-btn:not(:disabled):hover {
+        background: var(--ui-primary-hover, #3f3f46);
+      }
+      .year-nav-btn:disabled {
+        cursor: not-allowed;
+      }
+      [data-theme="light"] .year-nav-btn:disabled {
+        background: #e2e8f0;
+        color: #94a3b8;
+      }
+      [data-theme="dark"] .year-nav-btn:disabled {
+        background: #4a4a4a;
+        color: #888;
+      }
+      .classification-result {
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+      }
+      [data-theme="light"] .classification-result {
+        background: rgba(255, 237, 213, 0.65);
+      }
+      [data-theme="dark"] .classification-result {
+        background: rgba(255, 255, 255, 0.08);
+      }
+      .autocomplete-container {
+        position: relative;
+      }
+      .autocomplete-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        border: 2px solid #e5e7eb;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 100;
+        display: none;
+      }
+      [data-theme="light"] .autocomplete-dropdown {
+        background: #fff7ed;
+        border-color: rgba(194, 65, 12, 0.22);
+        color: #431407;
+        box-shadow: 0 8px 24px rgba(194, 65, 12, 0.1);
+      }
+      [data-theme="dark"] .autocomplete-dropdown {
+        background: #1e293b;
+        border-color: #334155;
+        color: #f1f5f9;
+      }
+      .autocomplete-dropdown.show {
+        display: block;
+      }
+      .autocomplete-item {
+        padding: 10px 16px;
+        cursor: pointer;
+        border-bottom: 1px solid #f3f4f6;
+      }
+      [data-theme="light"] .autocomplete-item {
+        border-bottom-color: #e2e8f0;
+      }
+      [data-theme="light"] .autocomplete-item:hover {
+        background: #ffedd5;
+      }
+      [data-theme="dark"] .autocomplete-item {
+        border-bottom-color: #334155;
+      }
+      [data-theme="dark"] .autocomplete-item:hover {
+        background: #334155;
+      }
+      .autocomplete-item:last-child {
+        border-bottom: none;
+      }
+      .selected-school-info {
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 16px;
+      }
+      [data-theme="light"] .selected-school-info {
+        background: rgba(255, 237, 213, 0.55);
+      }
+      [data-theme="dark"] .selected-school-info {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      [data-theme="light"] .person-result-row td {
+        background: rgba(255, 247, 237, 0.85);
+      }
+      [data-theme="dark"] .person-result-row td {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .person-result-row td:first-child {
+        border-radius: 8px 0 0 8px;
+      }
+      .person-result-row td:last-child {
+        border-radius: 0 8px 8px 0;
+      }
+
+      /* Sticky Nav Styles */
+      nav.sticky-nav {
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        background: var(--nav-bg);
+        border-bottom: 1px solid var(--nav-border);
+        box-shadow: var(--nav-shadow);
+      }
+      .theme-toggle-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        border: none;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+      }
+      [data-theme="light"] .theme-toggle-btn {
+        background: rgba(194, 65, 12, 0.14);
+        color: #9a3412;
+      }
+      [data-theme="light"] .theme-toggle-btn:hover {
+        background: rgba(194, 65, 12, 0.22);
+        color: #431407;
+      }
+      [data-theme="dark"] .theme-toggle-btn {
+        background: rgba(255, 255, 255, 0.08);
+        color: #e2e8f0;
+      }
+      [data-theme="dark"] .theme-toggle-btn:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+      }
+      .theme-toggle-btn svg {
+        width: 18px;
+        height: 18px;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .theme-toggle-btn .theme-icon-sun {
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+      }
+      .theme-toggle-btn .theme-icon-moon {
+        stroke: none;
+        fill: currentColor;
+      }
+      [data-theme="light"] .theme-icon-sun {
+        display: block;
+      }
+      [data-theme="light"] .theme-icon-moon {
+        display: none;
+      }
+      [data-theme="dark"] .theme-icon-sun {
+        display: none;
+      }
+      [data-theme="dark"] .theme-icon-moon {
+        display: block;
+      }
+      .results-container.themed-well {
+        background: var(--results-well-bg);
+      }
+
+      .lookup-submit:not(:disabled) {
+        cursor: pointer;
+        background: #0ea5e9;
+        color: #fff;
+      }
+      .lookup-submit:not(:disabled):hover {
+        background: #0284c7;
+      }
+      [data-theme="light"] .lookup-submit:not(:disabled) {
+        background: var(--ui-primary, #52525b);
+        color: #fafafa;
+      }
+      [data-theme="light"] .lookup-submit:not(:disabled):hover {
+        background: var(--ui-primary-hover, #3f3f46);
+        color: #fff;
+      }
+      [data-theme="light"] .lookup-submit:disabled {
+        background: #d4d4d8;
+        color: #52525b;
+        cursor: not-allowed;
+      }
+      [data-theme="dark"] .lookup-submit:disabled {
+        background: #6b7280;
+        color: #f9fafb;
+        opacity: 0.65;
+        cursor: not-allowed;
+      }
+
+      [data-theme="light"] body {
+        color: var(--body-fg, #431407);
+      }
+      [data-theme="dark"] body {
+        color: #e2e8f0;
+      }
+      [data-theme="light"] .form-label {
+        color: #422006;
+      }
+      [data-theme="dark"] .form-label {
+        color: #f4f4f5;
+      }
+      [data-theme="light"] .missing-years-banner {
+        background: rgba(251, 146, 60, 0.14);
+        border: 1px solid rgba(234, 88, 12, 0.28);
+        color: var(--accent-orange-muted);
+      }
+      [data-theme="dark"] .missing-years-banner {
+        background: rgba(251, 191, 36, 0.15);
+        border: 1px solid rgba(251, 191, 36, 0.25);
+        color: #fde68a;
+      }
+
+      /* Theme text: do not rely on Tailwind dark: on body (avoids wrong inheritance). */
+      [data-theme="light"] #indivBody td,
+      [data-theme="light"] #teamBody td {
+        color: #1c1917;
+      }
+      [data-theme="dark"] #indivBody td,
+      [data-theme="dark"] #teamBody td {
+        color: #f8fafc;
+      }
+      [data-theme="light"] #indivSection .section-heading,
+      [data-theme="light"] #teamSection .section-heading,
+      [data-theme="light"] #indivCount,
+      [data-theme="light"] #teamCount {
+        color: #422006;
+      }
+      [data-theme="dark"] #indivSection .section-heading,
+      [data-theme="dark"] #teamSection .section-heading {
+        color: #f8fafc;
+      }
+      [data-theme="light"] #scienceSortBtns {
+        color: #291c0f;
+      }
+      [data-theme="light"] .site-page-title {
+        color: #1c1917;
+      }
+      [data-theme="light"] .site-page-subtitle {
+        color: #78350f;
+      }
+      [data-theme="dark"] .site-page-title {
+        color: #f8fafc;
+      }
+      [data-theme="dark"] .site-page-subtitle {
+        color: #cbd5e1;
+      }
+      [data-theme="light"] #searchSummary {
+        color: #78350f;
+      }
+      [data-theme="light"] #personName,
+      [data-theme="light"] #classificationSchoolTitle {
+        color: #422006;
+      }
+      [data-theme="dark"] #personName,
+      [data-theme="dark"] #classificationSchoolTitle {
+        color: #d4d4d8;
+      }
+      [data-theme="dark"] #searchSummary {
+        color: var(--search-summary-fg, #fed7aa);
+      }
+      [data-theme="light"] .brand-open {
+        color: #44403c;
+      }
+      [data-theme="dark"] .brand-open {
+        color: #f8fafc;
+      }
+      [data-theme="light"] .brand-lockup .accent {
+        color: #ea580c;
+      }
+      [data-theme="dark"] .brand-lockup .accent {
+        color: #38bdf8;
+      }
+      [data-theme="light"] .nav-lookup-strip {
+        background: rgba(255, 252, 248, 0.96);
+        border: 1px solid rgba(194, 65, 12, 0.12);
+        box-shadow: 0 1px 3px rgba(194, 65, 12, 0.06);
+      }
+      [data-theme="dark"] .nav-lookup-strip {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      }
+      [data-theme="light"] .nav-lookup-label {
+        color: #292524;
+      }
+      [data-theme="dark"] .nav-lookup-label {
+        color: #cbd5e1;
+      }
+      [data-theme="light"] #classificationTableBody td {
+        color: #1c1917;
+      }
+      [data-theme="dark"] #classificationTableBody td {
+        color: #f8fafc;
+      }
+      [data-theme="light"] #personYearsContainer {
+        color: #1c1917;
+      }
+      [data-theme="light"] #personYearsContainer .glass-dark {
+        color: #1c1917;
+      }
+      [data-theme="light"] .person-line-meta {
+        color: #292524;
+      }
+      [data-theme="dark"] .person-line-meta {
+        color: rgba(248, 250, 252, 0.72);
+      }
+      [data-theme="light"] .person-result-card {
+        background: #e3e2df;
+        border: 1px solid rgba(120, 113, 108, 0.28);
+        box-shadow: 0 1px 2px rgba(28, 25, 23, 0.05);
+      }
+      [data-theme="light"] .person-result-card:hover {
+        background: #dcdad7;
+      }
+      [data-theme="dark"] .person-result-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid transparent;
+      }
+      [data-theme="dark"] .person-result-card:hover {
+        background: rgba(255, 255, 255, 0.12);
+      }
+      [data-theme="light"] .phys-sub {
+        color: #5c1f0c;
+      }
+      [data-theme="dark"] .phys-sub {
+        color: #fde047;
+      }
+      [data-theme="light"] .person-score-label {
+        color: #44403c;
+      }
+      [data-theme="dark"] .person-score-label {
+        color: rgba(248, 250, 252, 0.55);
+      }
+      [data-theme="light"] .person-year-heading {
+        color: #f97316;
+      }
+      [data-theme="dark"] .person-year-heading {
+        color: #facc15;
+      }
+      [data-theme="light"] .person-line-title {
+        color: #422006;
+      }
+      [data-theme="dark"] .person-line-title {
+        color: #f8fafc;
+      }
+      [data-theme="light"] .person-line-level {
+        color: #1c1917;
+      }
+      [data-theme="dark"] .person-line-level {
+        color: rgba(248, 250, 252, 0.92);
+      }
+      [data-theme="light"] .person-placement {
+        color: #1c1917;
+      }
+      [data-theme="dark"] .person-placement {
+        color: #38bdf8;
+      }
+      [data-theme="light"] .person-placement-aux {
+        color: #44403c;
+      }
+      [data-theme="dark"] .person-placement-aux {
+        color: rgba(186, 230, 253, 0.85);
+      }
+      /* Data load progress (below primary nav row) */
+      .nav-primary-row {
+        width: 100%;
+      }
+      .data-load-progress-shell {
+        width: 100%;
+        padding-top: 2px;
+      }
+      @media (min-width: 768px) {
+        .data-load-progress-shell {
+          margin-top: 2px;
+          padding-top: 0.6rem;
+          border-top: 1px solid var(--nav-border);
+        }
+      }
+      .data-load-progress-fill {
+        width: 0%;
+        transition: width 0.45s cubic-bezier(0.33, 1, 0.68, 1);
+        border-radius: 9999px;
+      }
+      .data-load-progress-shell--fading {
+        opacity: 0;
+        transition: opacity 0.55s ease-out;
+        pointer-events: none;
+      }
+      [data-theme="light"] .data-load-progress-track {
+        background: rgba(91, 33, 182, 0.12);
+        box-shadow: inset 0 1px 2px rgba(91, 33, 182, 0.08);
+      }
+      [data-theme="light"] .data-load-progress-fill {
+        background: linear-gradient(90deg, #7c3aed 0%, #6d28d9 100%);
+        box-shadow: 0 0 10px rgba(109, 40, 217, 0.28);
+      }
+      [data-theme="light"] .data-load-progress-label,
+      [data-theme="light"] .data-load-progress-pct {
+        color: #5b21b6;
+      }
+      [data-theme="dark"] .data-load-progress-track {
+        background: rgba(167, 139, 250, 0.14);
+        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
+      }
+      [data-theme="dark"] .data-load-progress-fill {
+        background: linear-gradient(90deg, #a78bfa 0%, #c4b5fd 100%);
+        box-shadow: 0 0 12px rgba(167, 139, 250, 0.22);
+      }
+      [data-theme="dark"] .data-load-progress-label,
+      [data-theme="dark"] .data-load-progress-pct {
+        color: #ddd6fe;
+      }
+    </style>
+  </head>
+  <body
+    id="openuilBody"
+    class="openuil-body-progress pt-[188px] md:pt-[168px] px-6 pb-10 bg-transparent"
+  >
+    <!-- Sticky Navigation Bar -->
+    <nav
+      class="sticky-nav fixed top-0 left-0 w-full z-50 flex flex-col gap-3 px-6 py-4"
+    >
+      <div
+        class="nav-primary-row flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-6"
+      >
+        <div
+          class="flex w-full min-w-0 shrink-0 items-center justify-between gap-2 md:w-auto md:justify-start"
+        >
+          <h1
+            class="brand-lockup shrink-0 font-bold tracking-tight"
+            style="font-size: clamp(1rem, 2.5vw, 1.25rem)"
+          >
+            <span class="brand-open">Open</span><span class="accent font-bold">UIL</span>
+          </h1>
+          <button
+            type="button"
+            id="themeToggle"
+            class="theme-toggle-btn shrink-0"
+            aria-label="Toggle color theme"
+            title="Light / dark mode"
+          >
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"
+              />
+            </svg>
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true">
+              <path fill="currentColor" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+            </svg>
+          </button>
+        </div>
+
+        <div
+          class="nav-lookup-strip flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-2 p-1 rounded-lg md:w-auto md:flex-nowrap md:justify-end md:gap-3"
+        >
+          <span class="nav-lookup-label shrink-0 pl-1 text-sm font-semibold md:pl-2">Lookup:</span>
+          <button
+            id="menuResults"
+            class="menu-btn active"
+            onclick="showPage('results')"
+          >
+            Results
+          </button>
+          <button id="menuPerson" class="menu-btn" onclick="showPage('person')">
+            Person
+          </button>
+          <button
+            id="menuClassification"
+            class="menu-btn"
+            onclick="showPage('classification')"
+          >
+            Classification
+          </button>
+        </div>
+      </div>
+      <div
+        id="dataLoadProgressShell"
+        class="data-load-progress-shell w-full shrink-0"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <div
+          class="flex items-center justify-between gap-2 text-xs font-semibold tracking-wide mb-1.5 px-0.5"
+        >
+          <span class="data-load-progress-label">Loading UIL data</span>
+          <span
+            id="dataLoadProgressPct"
+            class="data-load-progress-pct tabular-nums"
+            >0%</span>
+        </div>
+        <div
+          class="data-load-progress-track rounded-full h-2 w-full overflow-hidden"
+        >
+          <div
+            id="dataLoadProgressFill"
+            class="data-load-progress-fill h-full rounded-full"
+            style="width: 0%"
+          ></div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="max-w-5xl mx-auto mt-6">
+      <!-- RESULTS PAGE -->
+      <div id="pageResults">
+        <!-- Page Header -->
+        <div class="text-center mb-8">
+          <h2 class="site-page-title font-bold text-3xl mb-2">
+            Results Lookup
+          </h2>
+          <p class="site-page-subtitle text-base">
+            Search UIL Academic competition results by year, conference, and
+            event
+          </p>
+        </div>
+
+        <!-- Form Card -->
+        <div class="glass p-8 mb-6 max-w-4xl mx-auto">
+          <form id="lookupForm">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div>
+                <label
+                  class="block text-sm font-semibold form-label mb-2"
+                  >Year</label
+                >
+                <select
+                  id="year"
+                  required
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                ></select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold form-label mb-2"
+                  >Conference</label
+                >
+                <select
+                  id="conference"
+                  required
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                >
+                  <option value="">Select</option>
+                  <option value="1A">1A</option>
+                  <option value="2A">2A</option>
+                  <option value="3A">3A</option>
+                  <option value="4A">4A</option>
+                  <option value="5A">5A</option>
+                  <option value="6A">6A</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold form-label mb-2"
+                  >Competition</label
+                >
+                <select
+                  id="competition"
+                  required
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                >
+                  <option value="">Select</option>
+                  <option value="Accounting">Accounting</option>
+                  <option value="CalcApps">Calculator Applications</option>
+                  <option value="CompApps">Computer Applications</option>
+                  <option value="CompSci">Computer Science</option>
+                  <option value="CopyEditing">Copy Editing</option>
+                  <option value="CurrentIssues&Events">
+                    Current Issues & Events
+                  </option>
+                  <option value="Editorial">Editorial Writing</option>
+                  <option value="FeatureWriting">Feature Writing</option>
+                  <option value="HeadlineWriting">Headline Writing</option>
+                  <option value="InformativeSpeaking">
+                    Informative Speaking
+                  </option>
+                  <option value="LincolnDouglasDebate">
+                    Lincoln-Douglas Debate
+                  </option>
+                  <option value="LitCrit">Literary Criticism</option>
+                  <option value="Math">Mathematics</option>
+                  <option value="NumberSense">Number Sense</option>
+                  <option value="NewsWriting">News Writing</option>
+                  <option value="PersuasiveSpeaking">
+                    Persuasive Speaking
+                  </option>
+                  <option value="PoetryInterp">Poetry Interpretation</option>
+                  <option value="ProseInterp">Prose Interpretation</option>
+                  <option value="ReadyWriting">Ready Writing</option>
+                  <option value="Science">Science</option>
+                  <option value="SocialStudies">Social Studies</option>
+                  <option value="Spelling">Spelling</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold form-label mb-2"
+                  >View Type</label
+                >
+                <select
+                  id="viewType"
+                  required
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                >
+                  <option value="">Select</option>
+                  <option value="district">District</option>
+                  <option value="region">Region</option>
+                  <option value="state">State</option>
+                  <option value="region-districts">
+                    All Districts in region
+                  </option>
+                  <option value="all-districts">All Districts</option>
+                  <option value="all-regions">All Regions</option>
+                </select>
+              </div>
+              <div id="districtContainer" class="hidden">
+                <label class="block text-sm font-semibold form-label mb-2"
+                  >District</label
+                >
+                <select
+                  id="districtSelect"
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                ></select>
+              </div>
+              <div id="regionContainer" class="hidden">
+                <label class="block text-sm font-semibold form-label mb-2"
+                  >Region</label
+                >
+                <select
+                  id="regionSelect"
+                  class="openuil-field w-full px-3 py-2.5 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+                >
+                  <option value="">Select</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+            </div>
+            <button
+              id="submitLookupBtn"
+              type="submit"
+              disabled
+              class="lookup-submit w-full mt-6 font-bold py-3 text-lg rounded-xl transition-colors"
+            >
+              Look Up Results
+            </button>
+          </form>
+          <div
+            id="searchSummary"
+            class="hidden mt-4 text-center text-base font-semibold"
+          ></div>
+        </div>
+
+        <!-- Missing Data Alert -->
+        <div
+          id="missingAlert"
+          class="hidden missing-alert text-center text-base font-medium p-3 rounded-xl mb-4"
+        >
+          <span id="missingText"></span>
+        </div>
+
+        <!-- No Team Data Alert -->
+        <div
+          id="noTeamAlert"
+          class="hidden no-team-alert text-center text-base font-medium p-3 rounded-xl mb-4"
+        >
+          No team data available for this competition
+        </div>
+
+        <!-- No Data Alert -->
+        <div
+          id="noDataAlert"
+          class="hidden no-data-alert text-center text-base font-medium p-4 rounded-xl mb-4"
+        >
+          No data available for this event
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden space-y-6">
+          <!-- Individual Results -->
+          <div id="indivSection" class="glass-dark p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="section-heading font-bold text-lg">
+                Individual Results
+              </h2>
+              <span
+                id="indivCount"
+                class="text-sm text-orange-950/80 dark:text-white/70"
+              ></span>
+            </div>
+            <div
+              id="scienceSortBtns"
+              class="hidden flex gap-3 mb-3 text-sm text-orange-950/90 dark:text-white"
+            >
+              <span class="opacity-70">Sort by:</span>
+              <button class="sort-btn active" data-sort="total">Total</button>
+              <button class="sort-btn" data-sort="bio">Bio</button>
+              <button class="sort-btn" data-sort="chem">Chem</button>
+              <button class="sort-btn" data-sort="phys">Phys</button>
+            </div>
+            <div
+              class="results-container themed-well bg-neutral-50 dark:bg-white/5 rounded-xl"
+            >
+              <table>
+                <thead
+                  id="indivHead"
+                  class="text-zinc-900 dark:text-white"
+                ></thead>
+                <tbody
+                  id="indivBody"
+                  class="indiv-team-tbody text-zinc-900 dark:text-slate-100"
+                ></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Team Results -->
+          <div id="teamSection" class="glass-dark p-5">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="section-heading font-bold text-lg">
+                Team Results
+              </h2>
+              <span
+                id="teamCount"
+                class="text-sm text-orange-950/80 dark:text-white/70"
+              ></span>
+            </div>
+            <div
+              class="results-container themed-well bg-neutral-50 dark:bg-white/5 rounded-xl"
+            >
+              <table>
+                <thead
+                  id="teamHead"
+                  class="text-zinc-900 dark:text-white"
+                ></thead>
+                <tbody
+                  id="teamBody"
+                  class="indiv-team-tbody text-zinc-900 dark:text-slate-100"
+                ></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading -->
+        <div
+          id="loading"
+          class="hidden text-center py-16 text-orange-950 dark:text-white text-lg"
+        >
+          Loading...
+        </div>
+      </div>
+
+      <!-- CLASSIFICATION PAGE -->
+      <div id="pageClassification" class="hidden">
+        <!-- Page Header -->
+        <div class="text-center mb-8">
+          <h2 class="site-page-title font-bold text-3xl mb-2">
+            School Classification
+          </h2>
+          <p class="site-page-subtitle text-base">
+            Look up a school's conference, region, and district classification by
+            year
+          </p>
+        </div>
+
+        <div class="glass p-8 mb-6 max-w-2xl mx-auto">
+          <div class="autocomplete-container">
+            <label class="block text-sm font-semibold form-label mb-2"
+              >School Name</label
+            >
+            <input
+              type="text"
+              id="classificationSchool"
+              placeholder="Type to search for a school..."
+              autocomplete="off"
+              class="openuil-field w-full px-4 py-3 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+            />
+            <div id="autocompleteDropdown" class="autocomplete-dropdown"></div>
+          </div>
+          <div
+            id="classificationHint"
+            class="text-center text-orange-950/85 dark:text-gray-500 text-sm mt-3"
+          >
+            Start typing to search
+          </div>
+        </div>
+
+        <!-- All years classification display -->
+        <div id="classificationAllYears" class="hidden max-w-2xl mx-auto">
+          <div
+            id="classificationSchoolTitle"
+            class="text-zinc-900 dark:text-white font-bold text-2xl mb-4 text-center"
+          ></div>
+
+          <!-- Missing Years Alert -->
+          <div
+            id="missingYearsAlert"
+            class="missing-years-banner hidden text-center text-sm mb-4 p-3 rounded-lg"
+          >
+            Missing classification data for years: <span id="missingYearsText"></span>
+          </div>
+
+          <!-- Classification table -->
+          <div class="glass-dark p-4 rounded-xl">
+            <table class="w-full">
+              <thead class="text-zinc-900 dark:text-white">
+                <tr>
+                  <th class="text-left py-2 px-3">Year</th>
+                  <th class="text-left py-2 px-3">Conference</th>
+                  <th class="text-left py-2 px-3">Region</th>
+                  <th class="text-left py-2 px-3">District</th>
+                </tr>
+              </thead>
+              <tbody id="classificationTableBody" class="text-zinc-800 dark:text-white/90"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- PERSON LOOKUP PAGE -->
+      <div id="pagePerson" class="hidden">
+        <!-- Page Header -->
+        <div class="text-center mb-8">
+          <h2 class="site-page-title font-bold text-3xl mb-2">
+            Person Lookup
+          </h2>
+          <p class="site-page-subtitle text-base">
+            Search for a competitor's UIL Academic history across all years and
+            events
+          </p>
+        </div>
+
+        <div class="glass p-8 mb-6 max-w-2xl mx-auto">
+          <div class="autocomplete-container">
+            <label class="block text-sm font-semibold form-label mb-2"
+              >Person Name</label
+            >
+            <input
+              type="text"
+              id="personSearch"
+              placeholder="Type to search for a person..."
+              autocomplete="off"
+              class="openuil-field w-full px-4 py-3 text-base border-2 border-slate-300 bg-white text-slate-900 rounded-lg focus:border-sky-500 outline-none"
+            />
+            <div id="personDropdown" class="autocomplete-dropdown"></div>
+          </div>
+          <div id="personHint" class="text-center text-orange-950/85 dark:text-gray-500 text-sm mt-3">
+            Start typing to search
+          </div>
+        </div>
+
+        <!-- Person Results Display -->
+        <div id="personResults" class="hidden max-w-4xl mx-auto">
+          <div
+            id="personName"
+            class="font-bold text-2xl mb-6 text-center"
+          ></div>
+          <div id="personYearsContainer"></div>
+        </div>
+      </div>
+
+      <p
+        class="text-center text-xs text-orange-900/70 dark:text-gray-500 mt-14 mb-2 max-w-2xl mx-auto"
+      >
+        Data sourced from UT Direct (2004–2022) and SpeechWire (2023–present)
+      </p>
+    </div>
+
+    <style>
+      /* Loaded after Tailwind so light-mode native fields win over utilities */
+      html[data-theme="light"] .openuil-field {
+        background-color: #e8e8e6;
+        color: #1c1917;
+        border: 2px solid rgba(68, 64, 60, 0.18);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+      }
+      html[data-theme="light"] .openuil-field:focus {
+        border-color: #c2410c;
+        outline: none;
+      }
+      html[data-theme="light"] select.openuil-field option {
+        background-color: #e8e8e6;
+        color: #1c1917;
+      }
+      html[data-theme="dark"] .openuil-field {
+        background-color: #e4e4e7;
+        color: #0f172a;
+        border: 2px solid rgba(82, 82, 91, 0.45);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+      }
+      html[data-theme="dark"] .openuil-field:focus {
+        border-color: #38bdf8;
+        outline: none;
+      }
+      html[data-theme="dark"] select.openuil-field option {
+        background-color: #e4e4e7;
+        color: #0f172a;
+      }
+    </style>
+    <script src="app.js"></script>
+  </body>
+</html>
