@@ -34,7 +34,7 @@ cd OpenUIL
 
 ## Updates
 
-- 05/08/2025: Fixed data loading issue
+- 05/08/2026: Fixed data loading issue
 - 05/03/2026: Added 2026 Region data
 - 03/28/2026: Added 2026 District data
 
