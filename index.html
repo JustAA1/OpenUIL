@@ -430,6 +430,51 @@
       .results-container.themed-well {
         background: var(--results-well-bg);
       }
+      [data-theme="light"] .indiv-team-tbody {
+        color: #18181b;
+      }
+      [data-theme="dark"] .indiv-team-tbody {
+        color: #f1f5f9;
+      }
+      .indiv-team-tbody tr {
+        transition: background 0.2s ease-out;
+      }
+      [data-theme="light"] .indiv-team-tbody tr.results-row-even {
+        background: rgba(194, 65, 12, 0.06);
+      }
+      [data-theme="light"] .indiv-team-tbody tr.results-row-odd {
+        background: rgba(194, 65, 12, 0.11);
+      }
+      [data-theme="dark"] .indiv-team-tbody tr.results-row-even {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      [data-theme="dark"] .indiv-team-tbody tr.results-row-odd {
+        background: rgba(255, 255, 255, 0.1);
+      }
+      [data-theme="light"] .indiv-team-tbody tr.results-row-target {
+        background: rgba(234, 88, 12, 0.28);
+      }
+      [data-theme="dark"] .indiv-team-tbody tr.results-row-target {
+        background: rgba(56, 189, 248, 0.5);
+      }
+      [data-theme="light"] .indiv-team-tbody tr.results-row-target-fade {
+        background: rgba(234, 88, 12, 0.14);
+      }
+      [data-theme="dark"] .indiv-team-tbody tr.results-row-target-fade {
+        background: rgba(56, 189, 248, 0.1);
+      }
+      [data-theme="light"] #classificationTableBody tr.classification-row-even {
+        background: rgba(194, 65, 12, 0.06);
+      }
+      [data-theme="light"] #classificationTableBody tr.classification-row-odd {
+        background: rgba(194, 65, 12, 0.11);
+      }
+      [data-theme="dark"] #classificationTableBody tr.classification-row-even {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      [data-theme="dark"] #classificationTableBody tr.classification-row-odd {
+        background: rgba(255, 255, 255, 0.1);
+      }
 
       .lookup-submit:not(:disabled) {
         cursor: pointer;
@@ -529,6 +574,18 @@
       }
       [data-theme="dark"] #searchSummary {
         color: var(--search-summary-fg, #fed7aa);
+      }
+      #searchSummary,
+      #resultsSection,
+      #noDataAlert {
+        scroll-margin-top: 9rem;
+      }
+      @media (min-width: 768px) {
+        #searchSummary,
+        #resultsSection,
+        #noDataAlert {
+          scroll-margin-top: 8rem;
+        }
       }
       [data-theme="light"] .brand-open {
         color: #44403c;
@@ -633,60 +690,66 @@
       [data-theme="dark"] .person-placement-aux {
         color: rgba(186, 230, 253, 0.85);
       }
-      /* Data load progress (below primary nav row) */
+      .person-year-details > summary {
+        list-style: none;
+      }
+      .person-year-details > summary::-webkit-details-marker {
+        display: none;
+      }
+      .person-year-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .person-year-summary:hover {
+        background: rgba(0, 0, 0, 0.03);
+      }
+      [data-theme="dark"] .person-year-summary:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .person-year-chevron {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.25rem;
+        font-size: 1.25rem;
+        line-height: 1;
+        transition: transform 0.2s ease;
+        color: #a8a29e;
+      }
+      [data-theme="dark"] .person-year-chevron {
+        color: rgba(248, 250, 252, 0.45);
+      }
+      .person-year-details[open] .person-year-chevron {
+        transform: rotate(90deg);
+      }
+      [data-theme="light"] .person-year-event-count {
+        color: #44403c;
+      }
+      [data-theme="dark"] .person-year-event-count {
+        color: rgba(248, 250, 252, 0.85);
+      }
+      [data-theme="light"] .person-year-event-types {
+        color: #78716c;
+      }
+      [data-theme="dark"] .person-year-event-types {
+        color: rgba(248, 250, 252, 0.55);
+      }
+      .person-year-content {
+        border-top: 1px solid rgba(120, 113, 108, 0.2);
+      }
+      [data-theme="dark"] .person-year-content {
+        border-top-color: rgba(255, 255, 255, 0.1);
+      }
       .nav-primary-row {
         width: 100%;
-      }
-      .data-load-progress-shell {
-        width: 100%;
-        padding-top: 2px;
-      }
-      @media (min-width: 768px) {
-        .data-load-progress-shell {
-          margin-top: 2px;
-          padding-top: 0.6rem;
-          border-top: 1px solid var(--nav-border);
-        }
-      }
-      .data-load-progress-fill {
-        width: 0%;
-        transition: width 0.45s cubic-bezier(0.33, 1, 0.68, 1);
-        border-radius: 9999px;
-      }
-      .data-load-progress-shell--fading {
-        opacity: 0;
-        transition: opacity 0.55s ease-out;
-        pointer-events: none;
-      }
-      [data-theme="light"] .data-load-progress-track {
-        background: rgba(91, 33, 182, 0.12);
-        box-shadow: inset 0 1px 2px rgba(91, 33, 182, 0.08);
-      }
-      [data-theme="light"] .data-load-progress-fill {
-        background: linear-gradient(90deg, #7c3aed 0%, #6d28d9 100%);
-        box-shadow: 0 0 10px rgba(109, 40, 217, 0.28);
-      }
-      [data-theme="light"] .data-load-progress-label,
-      [data-theme="light"] .data-load-progress-pct {
-        color: #5b21b6;
-      }
-      [data-theme="dark"] .data-load-progress-track {
-        background: rgba(167, 139, 250, 0.14);
-        box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.25);
-      }
-      [data-theme="dark"] .data-load-progress-fill {
-        background: linear-gradient(90deg, #a78bfa 0%, #c4b5fd 100%);
-        box-shadow: 0 0 12px rgba(167, 139, 250, 0.22);
-      }
-      [data-theme="dark"] .data-load-progress-label,
-      [data-theme="dark"] .data-load-progress-pct {
-        color: #ddd6fe;
       }
     </style>
   </head>
   <body
     id="openuilBody"
-    class="openuil-body-progress pt-[188px] md:pt-[168px] px-6 pb-10 bg-transparent"
+    class="pt-[140px] md:pt-[124px] px-6 pb-10 bg-transparent"
   >
     <!-- Sticky Navigation Bar -->
     <nav
@@ -744,32 +807,6 @@
           >
             Classification
           </button>
-        </div>
-      </div>
-      <div
-        id="dataLoadProgressShell"
-        class="data-load-progress-shell w-full shrink-0"
-        role="status"
-        aria-live="polite"
-        aria-busy="true"
-      >
-        <div
-          class="flex items-center justify-between gap-2 text-xs font-semibold tracking-wide mb-1.5 px-0.5"
-        >
-          <span class="data-load-progress-label">Loading UIL data</span>
-          <span
-            id="dataLoadProgressPct"
-            class="data-load-progress-pct tabular-nums"
-            >0%</span>
-        </div>
-        <div
-          class="data-load-progress-track rounded-full h-2 w-full overflow-hidden"
-        >
-          <div
-            id="dataLoadProgressFill"
-            class="data-load-progress-fill h-full rounded-full"
-            style="width: 0%"
-          ></div>
         </div>
       </div>
     </nav>
@@ -855,8 +892,8 @@
                   <option value="PersuasiveSpeaking">
                     Persuasive Speaking
                   </option>
-                  <option value="PoetryInterp">Poetry Interpretation</option>
-                  <option value="ProseInterp">Prose Interpretation</option>
+                  <option value="PoetryInterpretation">Poetry Interpretation</option>
+                  <option value="ProseInterpretation">Prose Interpretation</option>
                   <option value="ReadyWriting">Ready Writing</option>
                   <option value="Science">Science</option>
                   <option value="SocialStudies">Social Studies</option>
@@ -949,6 +986,23 @@
 
         <!-- Results Section -->
         <div id="resultsSection" class="hidden space-y-6">
+          <div id="resultsTypeToggle" class="hidden flex gap-2">
+            <button
+              id="resultsTypeIndiv"
+              type="button"
+              class="menu-btn active"
+            >
+              Individual
+            </button>
+            <button
+              id="resultsTypeTeam"
+              type="button"
+              class="menu-btn"
+            >
+              Team
+            </button>
+          </div>
+
           <!-- Individual Results -->
           <div id="indivSection" class="glass-dark p-5">
             <div class="flex items-center justify-between mb-3">
@@ -971,7 +1025,7 @@
               <button class="sort-btn" data-sort="phys">Phys</button>
             </div>
             <div
-              class="results-container themed-well bg-neutral-50 dark:bg-white/5 rounded-xl"
+              class="results-container themed-well rounded-xl"
             >
               <table>
                 <thead
@@ -980,7 +1034,7 @@
                 ></thead>
                 <tbody
                   id="indivBody"
-                  class="indiv-team-tbody text-zinc-900 dark:text-slate-100"
+                  class="indiv-team-tbody"
                 ></tbody>
               </table>
             </div>
@@ -998,7 +1052,7 @@
               ></span>
             </div>
             <div
-              class="results-container themed-well bg-neutral-50 dark:bg-white/5 rounded-xl"
+              class="results-container themed-well rounded-xl"
             >
               <table>
                 <thead
@@ -1007,19 +1061,11 @@
                 ></thead>
                 <tbody
                   id="teamBody"
-                  class="indiv-team-tbody text-zinc-900 dark:text-slate-100"
+                  class="indiv-team-tbody"
                 ></tbody>
               </table>
             </div>
           </div>
-        </div>
-
-        <!-- Loading -->
-        <div
-          id="loading"
-          class="hidden text-center py-16 text-orange-950 dark:text-white text-lg"
-        >
-          Loading...
         </div>
       </div>
 

@@ -5,27 +5,9 @@
 const THEME_STORAGE_KEY = 'openuil-theme';
 const CLASSIFICATION_HINT_DEFAULT = 'Start typing to search';
 const PERSON_HINT_DEFAULT = 'Start typing to search';
-const LOADING_HINT_TEXT = 'Data is still loading...';
 
-let dataReady = false;
-
-function isDarkTheme() {
-    return document.documentElement.getAttribute('data-theme') === 'dark';
-}
-
-function defaultRowStripe(even) {
-    if (isDarkTheme()) {
-        return even ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.10)';
-    }
-    return even ? 'rgba(194, 65, 12, 0.06)' : 'rgba(194, 65, 12, 0.11)';
-}
-
-function targetRowBg() {
-    return isDarkTheme() ? 'rgba(56, 189, 248, 0.5)' : 'rgba(234, 88, 12, 0.28)';
-}
-
-function targetRowFade() {
-    return isDarkTheme() ? 'rgba(56, 189, 248, 0.1)' : 'rgba(234, 88, 12, 0.14)';
+function defaultRowStripeClass(even) {
+    return even ? 'classification-row-even' : 'classification-row-odd';
 }
 
 function applyTheme(mode) {
@@ -56,7 +38,7 @@ function initTheme() {
     }
 }
 
-/** Row stripes and target highlight use inline background from defaultRowStripe / targetRow — recompute on theme change. */
+/** Re-render tables whose non-row styling depends on theme (e.g. science sort headers). Row stripes use CSS classes. */
 function refreshThemeDependentTables() {
     const isScience = currentCompetition === 'Science';
     const isState = currentViewType === 'state';
@@ -75,7 +57,7 @@ function refreshThemeDependentTables() {
         const tbody = document.getElementById('classificationTableBody');
         if (wrap && !wrap.classList.contains('hidden') && tbody) {
             tbody.innerHTML = lastClassificationData.map((a, i) => `
-                <tr style="background: ${i % 2 === 0 ? defaultRowStripe(true) : defaultRowStripe(false)}">
+                <tr class="${i % 2 === 0 ? defaultRowStripeClass(true) : defaultRowStripeClass(false)}">
                     <td class="py-2 px-3 font-semibold">${a.year}</td>
                     <td class="py-2 px-3">${a.conference}</td>
                     <td class="py-2 px-3">${a.region || '-'}</td>
@@ -96,8 +78,10 @@ let lastClassificationData = null;
 let currentViewType = '';
 let currentCompetition = '';
 let currentSortField = 'total';
+let currentResultsView = 'indiv';
 let classificationSearchTimeout = null;
 let selectedSchoolName = null;
+let classificationResultsLoaded = false;
 let scrollToTarget = null;
 
 const DISTRICT_COLORS = [
@@ -115,6 +99,167 @@ const REGION_COLORS = [
     'rgba(255, 99, 132, 0.15)', 'rgba(54, 162, 235, 0.15)', 'rgba(255, 206, 86, 0.15)', 'rgba(75, 192, 192, 0.15)'
 ];
 
+// ---------------------------------------------------------------------------
+// Static data layer
+// Data is precomputed by generate_static.py into a `data/` folder and served
+// as plain static files (e.g. from S3). Point DATA_BASE at that folder — a
+// relative path when data sits next to index.html, or an absolute CDN/S3 URL
+// (e.g. 'https://dxxxx.cloudfront.net/data') if the data is hosted separately.
+// ---------------------------------------------------------------------------
+const DATA_BASE = 'data';
+
+// Must match SCORE_FIELDS in app.py.
+const SCORE_FIELDS = ['Total', 'Total Score', 'Score', 'Scores Totaled', 'Science Total', 'Written', 'Written Score', 'Objective Score', 'Objective', 'Points'];
+
+let _meta = null;
+let _searchIndexPromise = null;
+let _classificationsPromise = null;
+let _sortedSchoolKeys = null;
+const _personShardCache = {};
+
+function loadMeta() {
+    if (!_meta) _meta = fetch(`${DATA_BASE}/meta.json`).then(r => r.json());
+    return _meta;
+}
+
+function loadSearchIndex() {
+    if (!_searchIndexPromise) _searchIndexPromise = fetch(`${DATA_BASE}/search-index.json`).then(r => r.json());
+    return _searchIndexPromise;
+}
+
+function loadClassifications() {
+    if (!_classificationsPromise) _classificationsPromise = fetch(`${DATA_BASE}/classifications.json`).then(r => r.json());
+    return _classificationsPromise;
+}
+
+function loadPersonShard(shard) {
+    if (!_personShardCache[shard]) {
+        _personShardCache[shard] = fetch(`${DATA_BASE}/person/${shard}.json`).then(r => r.json());
+    }
+    return _personShardCache[shard];
+}
+
+// Must match slugify() in generate_static.py / app.py.
+function slugify(value) {
+    return String(value).replace(/[^A-Za-z0-9]+/g, '_');
+}
+
+// 32-bit FNV-1a over UTF-8 bytes. Must match fnv1a() in generate_static.py.
+function fnv1a(str) {
+    const bytes = new TextEncoder().encode(str);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < bytes.length; i++) {
+        h ^= bytes[i];
+        h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h >>> 0;
+}
+
+// ---- Result ranking (ported from app.py so it can run client-side) ----------
+function getScore(row) {
+    for (const f of SCORE_FIELDS) {
+        const val = row[f];
+        if (val) {
+            const n = Number(val);
+            if (!isNaN(n)) return n;
+        }
+    }
+    return 0;
+}
+
+function normalizeRow(row) {
+    for (const f of SCORE_FIELDS) {
+        if (row[f]) { row.Score = row[f]; return; }
+    }
+    row.Score = '';
+}
+
+function filterResults(data, year, competition, viewType, district, region) {
+    let filtered = data.filter(r => r.Year === year && r.EventName === competition);
+
+    if (viewType === 'district') {
+        filtered = filtered.filter(r => r.District === district && !r.Region && !r.State);
+    } else if (viewType === 'region') {
+        filtered = filtered.filter(r => r.Region === region && !r.State);
+    } else if (viewType === 'state') {
+        filtered = filtered.filter(r => r.State === '1');
+    } else if (viewType === 'region-districts') {
+        const regionNum = region ? parseInt(region) : 1;
+        const start = (regionNum - 1) * 8 + 1;
+        const end = regionNum * 8;
+        filtered = filtered.filter(r => r.District && !r.Region && !r.State);
+        filtered = filtered.filter(r => { const d = parseInt(r.District) || 0; return d >= start && d <= end; });
+    } else if (viewType === 'all-districts') {
+        filtered = filtered.filter(r => r.District && !r.Region && !r.State);
+    } else if (viewType === 'all-regions') {
+        filtered = filtered.filter(r => r.Region && !r.State);
+    }
+
+    return filtered;
+}
+
+function processResults(results, viewType) {
+    results.forEach(normalizeRow);
+    results.sort((a, b) => getScore(b) - getScore(a));
+
+    const isMulti = ['region-districts', 'all-districts', 'all-regions'].includes(viewType);
+
+    if (isMulti) {
+        let currentRank = 1;
+        let prevScore = null;
+        results.forEach((row, i) => {
+            const placeVal = row.Place;
+            if (placeVal) {
+                if (/[a-zA-Z]/.test(String(placeVal))) {
+                    row.OriginalPlace = String(placeVal);
+                } else {
+                    const n = parseInt(placeVal);
+                    row.OriginalPlace = isNaN(n) ? String(placeVal) : ordinal(n);
+                }
+            } else {
+                row.OriginalPlace = '';
+            }
+
+            const currentScore = getScore(row);
+            if (prevScore !== null && currentScore === prevScore) {
+                row.RelativePlace = ordinal(currentRank);
+            } else {
+                currentRank = i + 1;
+                row.RelativePlace = ordinal(currentRank);
+            }
+            prevScore = currentScore;
+        });
+    } else {
+        results.forEach(row => { row.RelativePlace = row.Place || ''; });
+    }
+
+    return results;
+}
+
+function getMissingDistricts(data, year, competition, viewType, region) {
+    let toCheck;
+    if (viewType === 'region-districts') {
+        const regionNum = region ? parseInt(region) : 1;
+        const start = (regionNum - 1) * 8 + 1;
+        const end = regionNum * 8;
+        toCheck = [];
+        for (let d = start; d <= end; d++) toCheck.push(d);
+    } else if (viewType === 'all-districts') {
+        toCheck = [];
+        for (let d = 1; d <= 32; d++) toCheck.push(d);
+    } else {
+        return [];
+    }
+
+    let filtered = data.filter(r => r.Year === year && r.EventName === competition);
+    filtered = filtered.filter(r => r.District && !r.Region && !r.State);
+
+    const have = new Set();
+    filtered.forEach(r => { const d = parseInt(r.District); if (!isNaN(d)) have.add(d); });
+
+    return toCheck.filter(d => !have.has(d));
+}
+
 const yearSelect = document.getElementById('year');
 const viewTypeSelect = document.getElementById('viewType');
 const districtContainer = document.getElementById('districtContainer');
@@ -123,13 +268,15 @@ const regionContainer = document.getElementById('regionContainer');
 const regionSelect = document.getElementById('regionSelect');
 const lookupForm = document.getElementById('lookupForm');
 const resultsSection = document.getElementById('resultsSection');
-const loading = document.getElementById('loading');
 const searchSummary = document.getElementById('searchSummary');
 const missingAlert = document.getElementById('missingAlert');
 const missingText = document.getElementById('missingText');
 const scienceSortBtns = document.getElementById('scienceSortBtns');
 const indivSection = document.getElementById('indivSection');
 const teamSection = document.getElementById('teamSection');
+const resultsTypeToggle = document.getElementById('resultsTypeToggle');
+const resultsTypeIndivBtn = document.getElementById('resultsTypeIndiv');
+const resultsTypeTeamBtn = document.getElementById('resultsTypeTeam');
 const noTeamAlert = document.getElementById('noTeamAlert');
 const noDataAlert = document.getElementById('noDataAlert');
 
@@ -137,6 +284,9 @@ const classificationSchool = document.getElementById('classificationSchool');
 
 const personSearch = document.getElementById('personSearch');
 let personSearchTimeout = null;
+let selectedPersonName = null;
+let selectedPersonSchool = null;
+let personResultsLoaded = false;
 
 function init() {
     initTheme();
@@ -155,13 +305,16 @@ function init() {
         btn.addEventListener('click', () => sortIndivBy(btn.dataset.sort));
     });
 
+    resultsTypeIndivBtn.addEventListener('click', () => setResultsView('indiv'));
+    resultsTypeTeamBtn.addEventListener('click', () => setResultsView('team'));
+
     ['year', 'conference', 'competition', 'districtSelect', 'regionSelect'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', checkFormValidity);
     });
 
     checkFormValidity();
-    startDataLoadProgress();
+    loadMeta();
 }
 
 function checkFormValidity() {
@@ -183,75 +336,7 @@ function checkFormValidity() {
         }
     }
     
-    submitBtn.disabled = !isValid || !dataReady;
-}
-
-function startDataLoadProgress() {
-    const shell = document.getElementById('dataLoadProgressShell');
-    const fill = document.getElementById('dataLoadProgressFill');
-    const pctEl = document.getElementById('dataLoadProgressPct');
-    const body = document.getElementById('openuilBody');
-
-    let pollTimer = null;
-    let fadeDone = false;
-
-    function applyPercent(p) {
-        const clamped = Math.max(0, Math.min(100, Math.round(Number(p))));
-        pctEl.textContent = `${clamped}%`;
-        fill.style.width = `${clamped}%`;
-    }
-
-    function finishAndFade() {
-        if (fadeDone) return;
-        fadeDone = true;
-        if (pollTimer != null) {
-            clearInterval(pollTimer);
-            pollTimer = null;
-        }
-        dataReady = true;
-        applyPercent(100);
-        shell.setAttribute('aria-busy', 'false');
-        checkFormValidity();
-
-        const cq = classificationSchool.value.trim();
-        if (cq.length >= 1) searchSchools();
-        const pq = personSearch.value.trim();
-        if (pq.length >= 2) searchPeople();
-
-        setTimeout(() => {
-            shell.classList.add('data-load-progress-shell--fading');
-        }, 2000);
-
-        const onFadeDone = (ev) => {
-            if (ev.target !== shell || ev.propertyName !== 'opacity') return;
-            shell.removeEventListener('transitionend', onFadeDone);
-            shell.classList.add('hidden');
-            if (body) {
-                body.classList.remove('pt-[188px]', 'md:pt-[168px]', 'openuil-body-progress');
-                body.classList.add('pt-[156px]', 'md:pt-[140px]');
-            }
-        };
-        shell.addEventListener('transitionend', onFadeDone);
-    }
-
-    async function poll() {
-        try {
-            const res = await fetch('/api/init-status');
-            const data = await res.json();
-            if (data.ready) {
-                applyPercent(100);
-                finishAndFade();
-                return;
-            }
-            applyPercent(data.percent ?? 0);
-        } catch (err) {
-            console.error(err);
-        }
-    }
-
-    applyPercent(0);
-    poll();
-    pollTimer = setInterval(poll, 130);
+    submitBtn.disabled = !isValid;
 }
 
 function showPage(page) {
@@ -277,10 +362,15 @@ function showPage(page) {
         menuClassification.classList.add('active');
         const cq = classificationSchool.value.trim();
         const ch = document.getElementById('classificationHint');
-        if (!dataReady && cq.length >= 1) {
-            ch.textContent = LOADING_HINT_TEXT;
-            ch.classList.remove('hidden');
-        } else if (cq.length >= 1 && dataReady) {
+
+        if (classificationResultsLoaded && cq === selectedSchoolName) {
+            ch.classList.add('hidden');
+            document.getElementById('autocompleteDropdown').classList.remove('show');
+            document.getElementById('classificationAllYears').classList.remove('hidden');
+            return;
+        }
+
+        if (cq.length >= 1) {
             searchSchools();
         } else {
             ch.textContent = CLASSIFICATION_HINT_DEFAULT;
@@ -291,10 +381,15 @@ function showPage(page) {
         menuPerson.classList.add('active');
         const pq = personSearch.value.trim();
         const ph = document.getElementById('personHint');
-        if (!dataReady && pq.length >= 2) {
-            ph.textContent = LOADING_HINT_TEXT;
-            ph.classList.remove('hidden');
-        } else if (pq.length >= 2 && dataReady) {
+
+        if (personResultsLoaded && pq === selectedPersonName) {
+            ph.classList.add('hidden');
+            document.getElementById('personDropdown').classList.remove('show');
+            document.getElementById('personResults').classList.remove('hidden');
+            return;
+        }
+
+        if (pq.length >= 2) {
             searchPeople();
         } else {
             ph.textContent = PERSON_HINT_DEFAULT;
@@ -320,6 +415,7 @@ async function searchSchools() {
     const dropdown = document.getElementById('autocompleteDropdown');
     
     document.getElementById('classificationAllYears').classList.add('hidden');
+    classificationResultsLoaded = false;
     
     if (query.length < 1) {
         hint.textContent = CLASSIFICATION_HINT_DEFAULT;
@@ -329,28 +425,25 @@ async function searchSchools() {
         return;
     }
 
-    if (!dataReady) {
-        hint.textContent = LOADING_HINT_TEXT;
-        hint.classList.remove('hidden');
-        dropdown.classList.remove('show');
-        dropdown.innerHTML = '';
-        return;
-    }
-    
     hint.classList.add('hidden');
     
     try {
-        const res = await fetch(`/api/school-search?query=${encodeURIComponent(query)}`);
-        if (res.status === 503) {
-            hint.textContent = LOADING_HINT_TEXT;
-            hint.classList.remove('hidden');
-            dropdown.classList.remove('show');
-            return;
+        const classifications = await loadClassifications();
+        if (!_sortedSchoolKeys) {
+            _sortedSchoolKeys = Object.keys(classifications)
+                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
         }
-        const data = await res.json();
-        
-        if (data.results && data.results.length > 0) {
-            const uniqueSchools = data.results;
+        const q = query.toLowerCase();
+        const results = [];
+        for (const school of _sortedSchoolKeys) {
+            if (school.toLowerCase().includes(q)) {
+                results.push(school);
+                if (results.length >= 20) break;
+            }
+        }
+
+        if (results.length > 0) {
+            const uniqueSchools = results;
             dropdown.innerHTML = uniqueSchools.map(school => `
                 <div class="autocomplete-item" onclick='selectSchoolAllYears("${school.replace(/"/g, '&quot;')}")'>
                     ${school}
@@ -368,12 +461,6 @@ async function searchSchools() {
 }
 
 async function selectSchoolAllYears(schoolName) {
-    if (!dataReady) {
-        document.getElementById('classificationHint').textContent = LOADING_HINT_TEXT;
-        document.getElementById('classificationHint').classList.remove('hidden');
-        return;
-    }
-
     classificationSchool.value = schoolName;
     selectedSchoolName = schoolName;
     
@@ -381,13 +468,8 @@ async function selectSchoolAllYears(schoolName) {
     document.getElementById('classificationHint').classList.add('hidden');
     
     try {
-        const res = await fetch(`/api/classification-all-years?school=${encodeURIComponent(schoolName)}`);
-        if (res.status === 503) {
-            document.getElementById('classificationHint').textContent = LOADING_HINT_TEXT;
-            document.getElementById('classificationHint').classList.remove('hidden');
-            return;
-        }
-        const data = await res.json();
+        const classifications = await loadClassifications();
+        const data = classifications[schoolName] || { classifications: [], alignments: [], missingYears: '', count: 0 };
         
         document.getElementById('classificationSchoolTitle').textContent = schoolName;
         
@@ -406,7 +488,7 @@ async function selectSchoolAllYears(schoolName) {
         const tbody = document.getElementById('classificationTableBody');
         if (classificationRows.length > 0) {
             tbody.innerHTML = classificationRows.map((a, i) => `
-                <tr style="background: ${i % 2 === 0 ? defaultRowStripe(true) : defaultRowStripe(false)}">
+                <tr class="${i % 2 === 0 ? defaultRowStripeClass(true) : defaultRowStripeClass(false)}">
                     <td class="py-2 px-3 font-semibold">${a.year}</td>
                     <td class="py-2 px-3">${a.conference}</td>
                     <td class="py-2 px-3">${a.region || '-'}</td>
@@ -418,6 +500,7 @@ async function selectSchoolAllYears(schoolName) {
         }
         
         document.getElementById('classificationAllYears').classList.remove('hidden');
+        classificationResultsLoaded = true;
     } catch (err) {
         console.error(err);
     }
@@ -435,17 +518,10 @@ async function searchPeople() {
     const dropdown = document.getElementById('personDropdown');
     
     document.getElementById('personResults').classList.add('hidden');
+    personResultsLoaded = false;
     
     if (query.length < 2) {
         hint.textContent = PERSON_HINT_DEFAULT;
-        hint.classList.remove('hidden');
-        dropdown.classList.remove('show');
-        dropdown.innerHTML = '';
-        return;
-    }
-
-    if (!dataReady) {
-        hint.textContent = LOADING_HINT_TEXT;
         hint.classList.remove('hidden');
         dropdown.classList.remove('show');
         dropdown.innerHTML = '';
@@ -455,17 +531,19 @@ async function searchPeople() {
     hint.classList.add('hidden');
     
     try {
-        const res = await fetch(`/api/person-search?query=${encodeURIComponent(query)}`);
-        if (res.status === 503) {
-            hint.textContent = LOADING_HINT_TEXT;
-            hint.classList.remove('hidden');
-            dropdown.classList.remove('show');
-            return;
+        const index = await loadSearchIndex();
+        const q = query.toLowerCase();
+        const results = [];
+        for (const [name, schoolIdx] of index.people) {
+            const school = index.schools[schoolIdx] || '';
+            if (`${name.toLowerCase()} ${school.toLowerCase()}`.includes(q)) {
+                results.push({ name, school });
+                if (results.length >= 50) break;
+            }
         }
-        const data = await res.json();
-        
-        if (data.results && data.results.length > 0) {
-            dropdown.innerHTML = data.results.map(item => {
+
+        if (results.length > 0) {
+            dropdown.innerHTML = results.map(item => {
                 const escapedName = item.name.replace(/"/g, '&quot;');
                 const escapedSchool = item.school ? item.school.replace(/"/g, '&quot;') : '';
                 return `
@@ -487,44 +565,48 @@ async function searchPeople() {
 }
 
 async function selectPerson(name, school) {
-    if (!dataReady) {
-        document.getElementById('personHint').textContent = LOADING_HINT_TEXT;
-        document.getElementById('personHint').classList.remove('hidden');
-        return;
-    }
-
-    const displayText = school ? `${name} – ${school}` : name;
-    personSearch.value = displayText;
+    personSearch.value = name;
+    selectedPersonName = name;
+    selectedPersonSchool = school;
     document.getElementById('personDropdown').classList.remove('show');
     document.getElementById('personHint').classList.add('hidden');
+    const displayText = school ? `${name} – ${school}` : name;
     document.getElementById('personName').textContent = displayText;
     
     try {
-        let url = `/api/person-results?name=${encodeURIComponent(name)}`;
-        if (school) {
-            url += `&school=${encodeURIComponent(school)}`;
-        }
-        const res = await fetch(url);
-        if (res.status === 503) {
-            document.getElementById('personHint').textContent = LOADING_HINT_TEXT;
-            document.getElementById('personHint').classList.remove('hidden');
-            return;
-        }
-        const data = await res.json();
-        
-        document.getElementById('personName').textContent = displayText;
+        const meta = await loadMeta();
+        const key = `${name}|${school}`;
+        const shard = fnv1a(key) % meta.personShards;
+        const shardData = await loadPersonShard(shard);
+        const data = shardData[key] || { years: [], count: 0 };
         
         const container = document.getElementById('personYearsContainer');
         
         if (data.years && data.years.length > 0) {
-            container.innerHTML = data.years.map(yearData => `
-                <div class="glass-dark p-5 rounded-xl mb-4">
-                    <div class="person-year-heading font-bold text-xl mb-4">${yearData.year}</div>
-                    ${yearData.events.map(eventData => `
-                        <div class="mb-4 last:mb-0">
-                            <div class="person-line-title font-semibold text-lg mb-2">${eventData.event}</div>
-                            <div class="grid gap-2">
-                                ${eventData.results.map(r => {
+            container.innerHTML = data.years.map(yearData => {
+                const eventCount = yearData.events.length;
+                const meetCount = yearData.events.reduce((sum, e) => sum + e.results.length, 0);
+                const eventLabel = eventCount === 1 ? '1 event' : `${eventCount} events`;
+                const meetLabel = meetCount === 1 ? '1 meet' : `${meetCount} meets`;
+                const eventTypes = yearData.events.map(e => e.event).join(', ');
+
+                return `
+                <div class="glass-dark rounded-xl mb-3 person-year-block">
+                    <details class="person-year-details">
+                        <summary class="person-year-summary p-4 cursor-pointer select-none">
+                            <span class="person-year-heading font-bold text-xl shrink-0">${yearData.year}</span>
+                            <span class="person-year-meta flex flex-col items-end text-right min-w-0 flex-1 gap-0.5 mx-3">
+                                <span class="person-year-event-count text-sm font-medium">${eventLabel}, ${meetLabel}</span>
+                                <span class="person-year-event-types text-xs leading-snug">${eventTypes}</span>
+                            </span>
+                            <span class="person-year-chevron shrink-0" aria-hidden="true">›</span>
+                        </summary>
+                        <div class="person-year-content px-4 pb-4 pt-3">
+                            ${yearData.events.map(eventData => `
+                                <div class="mb-4 last:mb-0">
+                                    <div class="person-line-title font-semibold text-lg mb-2">${eventData.event}</div>
+                                    <div class="grid gap-2">
+                                        ${eventData.results.map(r => {
                                     const hasSubscores = r.biology && r.bioRank;
                                     
                                     return `
@@ -600,15 +682,18 @@ async function selectPerson(name, school) {
                                         `}
                                     </div>
                                 `}).join('')}
-                            </div>
+                                    </div>
+                                </div>
+                            `).join('')}
                         </div>
-                    `).join('')}
-                </div>
-            `).join('');
+                    </details>
+                </div>`;
+            }).join('');
         } else {
             container.innerHTML = '<div class="text-center text-orange-900/75 dark:text-white/60 py-8">No results found for this person</div>';
         }
         
+        personResultsLoaded = true;
         document.getElementById('personResults').classList.remove('hidden');
     } catch (err) {
         console.error(err);
@@ -663,12 +748,24 @@ function handleViewTypeChange() {
     checkFormValidity();
 }
 
+function scrollToLookupResults() {
+    requestAnimationFrame(() => {
+        let el = null;
+        if (!resultsSection.classList.contains('hidden')) {
+            el = resultsSection;
+        } else if (!noDataAlert.classList.contains('hidden')) {
+            el = noDataAlert;
+        } else if (!searchSummary.classList.contains('hidden')) {
+            el = searchSummary;
+        }
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+}
+
 async function handleSubmit(e) {
     e.preventDefault();
-
-    if (!dataReady) {
-        return;
-    }
     
     const year = yearSelect.value;
     const conference = document.getElementById('conference').value;
@@ -680,28 +777,34 @@ async function handleSubmit(e) {
     currentViewType = viewType;
     currentCompetition = competition;
     currentSortField = 'total';
+    currentResultsView = 'indiv';
     
-    loading.classList.remove('hidden');
     resultsSection.classList.add('hidden');
     missingAlert.classList.add('hidden');
     noTeamAlert.classList.add('hidden');
     noDataAlert.classList.add('hidden');
     
     try {
-        let url = `/api/search?year=${year}&conference=${conference}&competition=${encodeURIComponent(competition)}&viewType=${viewType}`;
-        if (viewType === 'district') url += `&district=${district}`;
-        else if (viewType === 'region' || viewType === 'region-districts') url += `&region=${region}`;
-        
-        const res = await fetch(url);
-        if (res.status === 503) {
-            console.warn('Results data still loading');
-            loading.classList.add('hidden');
-            return;
+        let payload = { indiv: [], team: [] };
+        const res = await fetch(`${DATA_BASE}/results/${conference}/${year}/${slugify(competition)}.json`);
+        if (res.ok) {
+            payload = await res.json();
         }
-        const data = await res.json();
-        
-        if (data.error) throw new Error(data.error);
-        
+
+        const indivRaw = payload.indiv || [];
+        const teamRaw = payload.team || [];
+
+        const indivResults = processResults(filterResults(indivRaw, year, competition, viewType, district, region), viewType);
+        const teamResults = processResults(filterResults(teamRaw, year, competition, viewType, district, region), viewType);
+        const missingDistricts = getMissingDistricts(indivRaw, year, competition, viewType, region);
+
+        const data = {
+            indiv: indivResults,
+            team: teamResults,
+            count: indivResults.length + teamResults.length,
+            missingDistricts,
+        };
+
         displayResults(data, viewType, competition);
         
         const compName = document.getElementById('competition').selectedOptions[0].text;
@@ -714,25 +817,62 @@ async function handleSubmit(e) {
             missingText.textContent = `No data: District ${data.missingDistricts.join(', ')}`;
             missingAlert.classList.remove('hidden');
         }
+
+        scrollToLookupResults();
     } catch (err) {
         console.error(err);
     }
-    loading.classList.add('hidden');
 }
 
-function getRowBackground(row, index, viewType) {
+function getRowStripeClass(row, index, viewType) {
     const isMultiDistrict = ['region-districts', 'all-districts'].includes(viewType);
     const isMultiRegion = viewType === 'all-regions';
-    
+
+    if (isMultiDistrict && row.District) return '';
+    if (isMultiRegion && row.Region) return '';
+    return index % 2 === 0 ? 'results-row-even' : 'results-row-odd';
+}
+
+function getRowInlineBackground(row, index, viewType) {
+    const isMultiDistrict = ['region-districts', 'all-districts'].includes(viewType);
+    const isMultiRegion = viewType === 'all-regions';
+
     if (isMultiDistrict && row.District) {
         const districtNum = parseInt(row.District) || 1;
         return DISTRICT_COLORS[(districtNum - 1) % DISTRICT_COLORS.length];
-    } else if (isMultiRegion && row.Region) {
+    }
+    if (isMultiRegion && row.Region) {
         const regionNum = parseInt(row.Region) || 1;
         return REGION_COLORS[(regionNum - 1) % REGION_COLORS.length];
     }
-    
-    return index % 2 === 0 ? defaultRowStripe(true) : defaultRowStripe(false);
+    return '';
+}
+
+function buildResultsRowAttrs(row, index, viewType, isTarget, targetId) {
+    const stripeClass = getRowStripeClass(row, index, viewType);
+    const inlineBg = getRowInlineBackground(row, index, viewType);
+    const classes = [isTarget ? 'results-row-target' : stripeClass].filter(Boolean).join(' ');
+    const idAttr = targetId ? ` id="${targetId}"` : '';
+    const stripeData = stripeClass ? ` data-stripe="${stripeClass}"` : '';
+    const styleAttr = inlineBg ? ` style="background: ${inlineBg}"` : '';
+    return { classes, idAttr, stripeData, styleAttr };
+}
+
+function fadeTargetRow(el) {
+    if (!el) return;
+    el.classList.remove('results-row-target');
+    el.classList.add('results-row-target-fade');
+}
+
+function setResultsView(view) {
+    if (!['indiv', 'team'].includes(view)) return;
+    currentResultsView = view;
+
+    resultsTypeIndivBtn.classList.toggle('active', view === 'indiv');
+    resultsTypeTeamBtn.classList.toggle('active', view === 'team');
+
+    indivSection.classList.toggle('hidden', view !== 'indiv');
+    teamSection.classList.toggle('hidden', view !== 'team');
 }
 
 function displayResults(data, viewType, competition) {
@@ -766,23 +906,32 @@ function displayResults(data, viewType, competition) {
     } else {
         scienceSortBtns.classList.add('hidden');
     }
-    
+
     if (hasIndiv) {
-        indivSection.classList.remove('hidden');
         renderIndiv(currentIndivData, viewType, isScience, isState, isMultiDistrict, isMultiRegion);
         document.getElementById('indivCount').textContent = `${currentIndivData.length} results`;
-    } else {
-        indivSection.classList.add('hidden');
     }
-    
+
     if (hasTeam) {
-        teamSection.classList.remove('hidden');
-        noTeamAlert.classList.add('hidden');
         renderTeam(teamData, viewType, isState, isMultiDistrict, isMultiRegion);
         document.getElementById('teamCount').textContent = `${teamData.length} results`;
+    }
+
+    if (hasIndiv && hasTeam) {
+        resultsTypeToggle.classList.remove('hidden');
+        noTeamAlert.classList.add('hidden');
+        setResultsView(currentResultsView === 'team' ? 'team' : 'indiv');
     } else {
-        teamSection.classList.add('hidden');
-        if (hasIndiv) noTeamAlert.classList.remove('hidden');
+        resultsTypeToggle.classList.add('hidden');
+        if (hasIndiv) {
+            indivSection.classList.remove('hidden');
+            teamSection.classList.add('hidden');
+            noTeamAlert.classList.remove('hidden');
+        } else {
+            indivSection.classList.add('hidden');
+            teamSection.classList.remove('hidden');
+            noTeamAlert.classList.add('hidden');
+        }
     }
 }
 
@@ -812,15 +961,15 @@ function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMult
     let foundTarget = false;
     
     data.forEach((row, i) => {
-        let bgColor = getRowBackground(row, i, viewType);
-        let nameField = row['Team Members'] || row.Entry || '';
+        const nameField = row['Team Members'] || row.Entry || '';
         
         let isTarget = false;
         if (scrollToTarget && nameField === scrollToTarget) {
             isTarget = true;
             foundTarget = true;
-            bgColor = targetRowBg();
         }
+        
+        const rowAttrs = buildResultsRowAttrs(row, i, viewType, isTarget, isTarget ? 'targetRow' : '');
         
         let name = nameField || '-';
         let school = row['School Name'] || row.School || '-';
@@ -835,7 +984,7 @@ function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMult
             name += `<div class="text-[10px] opacity-60">${row.OriginalPlace} in R${row.Region}</div>`;
         }
         
-        b += `<tr ${isTarget ? 'id="targetRow"' : ''} style="background: ${bgColor}; transition: background 2s ease-out;"><td class="text-left">${row.RelativePlace || row.Place || '-'}</td><td class="text-left">${name}</td><td class="text-left">${school}</td>`;
+        b += `<tr${rowAttrs.idAttr} class="${rowAttrs.classes}"${rowAttrs.stripeData}${rowAttrs.styleAttr}><td class="text-left">${row.RelativePlace || row.Place || '-'}</td><td class="text-left">${name}</td><td class="text-left">${school}</td>`;
         b += `<td class="text-left">${row.Score || '-'}</td>`;
         if (hasBio) b += `<td class="text-left ${isBioHighlight ? highlightClass : ''}">${row.Biology || '-'}</td>`;
         if (hasChem) b += `<td class="text-left ${isChemHighlight ? highlightClass : ''}">${row.Chemistry || '-'}</td>`;
@@ -851,9 +1000,7 @@ function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMult
             const el = document.getElementById('targetRow');
             if (el) {
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => {
-                    el.style.background = targetRowFade();
-                }, 2000);
+                setTimeout(() => fadeTargetRow(el), 2000);
             }
             scrollToTarget = null;
         }, 300);
@@ -877,7 +1024,6 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
     let foundTarget = false;
     
     data.forEach((row, i) => {
-        let bgColor = getRowBackground(row, i, viewType);
         let school = row['School Name'] || '-';
         
         let members = row['Team Members'] || '';
@@ -885,8 +1031,9 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
         if (scrollToTarget && members.includes(scrollToTarget)) {
             isTarget = true;
             foundTarget = true;
-            bgColor = targetRowBg();
         }
+
+        const rowAttrs = buildResultsRowAttrs(row, i, viewType, isTarget, isTarget ? 'targetRowTeam' : '');
         
         if (isMultiDistrict && row.OriginalPlace && row.District) {
             school += `<div class="text-[10px] opacity-60">${row.OriginalPlace} in D${row.District}</div>`;
@@ -894,7 +1041,7 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
             school += `<div class="text-[10px] opacity-60">${row.OriginalPlace} in R${row.Region}</div>`;
         }
         
-        b += `<tr ${isTarget ? 'id="targetRowTeam"' : ''} style="background: ${bgColor}; transition: background 2s ease-out;"><td class="text-left">${row.RelativePlace || row.Place || '-'}</td><td class="text-left">${school}</td>`;
+        b += `<tr${rowAttrs.idAttr} class="${rowAttrs.classes}"${rowAttrs.stripeData}${rowAttrs.styleAttr}><td class="text-left">${row.RelativePlace || row.Place || '-'}</td><td class="text-left">${school}</td>`;
         if (hasMembers) b += `<td class="members-cell text-left">${row['Team Members'] || '-'}</td>`;
         b += `<td class="text-left">${row.Score || '-'}</td>`;
         if (hasPoints) b += `<td class="text-left">${row.Points || '-'}</td>`;
@@ -914,9 +1061,7 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
             }
             
             if (teamEl) {
-                setTimeout(() => {
-                    teamEl.style.background = targetRowFade();
-                }, 2000);
+                setTimeout(() => fadeTargetRow(teamEl), 2000);
             }
         }, 300);
     }
