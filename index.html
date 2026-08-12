@@ -742,8 +742,209 @@
       [data-theme="dark"] .person-year-content {
         border-top-color: rgba(255, 255, 255, 0.1);
       }
+      .school-years-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+        gap: 0.75rem;
+      }
+      .school-year-chip {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.35rem;
+        padding: 1rem 0.9rem;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        text-align: left;
+        transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+        border: 1px solid transparent;
+      }
+      [data-theme="light"] .school-year-chip {
+        background: rgba(255, 255, 255, 0.72);
+        border-color: rgba(194, 65, 12, 0.14);
+        box-shadow: 0 1px 2px rgba(28, 25, 23, 0.04);
+      }
+      [data-theme="dark"] .school-year-chip {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+      .school-year-chip:hover {
+        transform: translateY(-1px);
+      }
+      [data-theme="light"] .school-year-chip:hover {
+        background: rgba(255, 247, 237, 0.95);
+        border-color: rgba(234, 88, 12, 0.28);
+      }
+      [data-theme="dark"] .school-year-chip:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(250, 204, 21, 0.35);
+      }
+      .school-year-heading {
+        font-size: 1.5rem;
+        line-height: 1.2;
+      }
+      [data-theme="light"] .school-year-heading {
+        color: #f97316;
+      }
+      [data-theme="dark"] .school-year-heading {
+        color: #facc15;
+      }
+      [data-theme="light"] .school-year-class {
+        color: #78716c;
+      }
+      [data-theme="dark"] .school-year-class {
+        color: rgba(248, 250, 252, 0.55);
+      }
+      .school-year-nav {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .school-year-nav-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 0.65rem;
+        font-size: 1.35rem;
+        line-height: 1;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+        border: 1px solid transparent;
+      }
+      [data-theme="light"] .school-year-nav-btn {
+        background: rgba(255, 255, 255, 0.85);
+        border-color: rgba(194, 65, 12, 0.18);
+        color: #9a3412;
+      }
+      [data-theme="dark"] .school-year-nav-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.14);
+        color: rgba(248, 250, 252, 0.92);
+      }
+      [data-theme="light"] .school-year-nav-btn:hover:not(:disabled) {
+        background: #fff7ed;
+        border-color: rgba(234, 88, 12, 0.35);
+      }
+      [data-theme="dark"] .school-year-nav-btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(250, 204, 21, 0.4);
+      }
+      .school-year-nav-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.38;
+        pointer-events: none;
+      }
+      .school-year-nav-select {
+        min-width: 5.5rem;
+        height: 2.25rem;
+        padding: 0 0.6rem;
+        border-radius: 0.65rem;
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        outline: none;
+      }
+      [data-theme="light"] .school-year-nav-select {
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(194, 65, 12, 0.18);
+        color: #9a3412;
+      }
+      [data-theme="dark"] .school-year-nav-select {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: rgba(248, 250, 252, 0.92);
+      }
+      .school-event-details > summary {
+        list-style: none;
+      }
+      .school-event-details > summary::-webkit-details-marker {
+        display: none;
+      }
+      .school-event-summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        border-radius: 0.5rem;
+      }
+      .school-event-summary:hover {
+        background: rgba(0, 0, 0, 0.03);
+      }
+      [data-theme="dark"] .school-event-summary:hover {
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .school-event-details[open] .person-year-chevron {
+        transform: rotate(90deg);
+      }
+      .school-event-content {
+        border-top: 1px solid rgba(120, 113, 108, 0.15);
+      }
+      [data-theme="dark"] .school-event-content {
+        border-top-color: rgba(255, 255, 255, 0.08);
+      }
+      .school-meet-card:hover {
+        background: rgba(0, 0, 0, 0.04);
+      }
+      [data-theme="dark"] .school-meet-card:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .school-meet-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 5.75rem 2.6rem 3.1rem;
+        align-items: center;
+        column-gap: 0.5rem;
+      }
+      .school-meet-advance {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .school-meet-place,
+      .school-meet-score {
+        text-align: right;
+        white-space: nowrap;
+      }
+      .indiv-team-tbody tr.results-row-target {
+        transition: background 0.9s ease, box-shadow 0.9s ease;
+        box-shadow: inset 3px 0 0 rgba(234, 88, 12, 0.85);
+      }
+      [data-theme="dark"] .indiv-team-tbody tr.results-row-target {
+        box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.95);
+      }
+      .indiv-team-tbody tr.results-row-target-fade {
+        transition: background 1.2s ease, box-shadow 1.2s ease;
+        box-shadow: inset 3px 0 0 transparent;
+      }
       .nav-primary-row {
         width: 100%;
+      }
+      #navSchoolYearBar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        padding-top: 0;
+        margin-top: -0.75rem;
+        pointer-events: none;
+        transform: translateY(-6px);
+        transition:
+          max-height 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.28s ease,
+          padding-top 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+          margin-top 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #navSchoolYearBar.is-visible {
+        max-height: 3.25rem;
+        opacity: 1;
+        padding-top: 0.15rem;
+        margin-top: 0;
+        pointer-events: auto;
+        transform: translateY(0);
       }
     </style>
   </head>
@@ -790,14 +991,7 @@
           class="nav-lookup-strip flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-2 p-1 rounded-lg md:w-auto md:flex-nowrap md:justify-end md:gap-3"
         >
           <span class="nav-lookup-label shrink-0 pl-1 text-sm font-semibold md:pl-2">Lookup:</span>
-          <button
-            id="menuResults"
-            class="menu-btn active"
-            onclick="showPage('results')"
-          >
-            Results
-          </button>
-          <button id="menuPerson" class="menu-btn" onclick="showPage('person')">
+          <button id="menuPerson" class="menu-btn active" onclick="showPage('person')">
             Person
           </button>
           <button
@@ -805,7 +999,42 @@
             class="menu-btn"
             onclick="showPage('classification')"
           >
-            Classification
+            School
+          </button>
+          <button
+            id="menuResults"
+            class="menu-btn"
+            onclick="showPage('results')"
+          >
+            Results
+          </button>
+        </div>
+      </div>
+      <div id="navSchoolYearBar" aria-label="School year navigation">
+        <div class="school-year-nav" role="group" aria-label="Year navigation">
+          <button
+            type="button"
+            id="schoolYearPrevBtnNav"
+            class="school-year-nav-btn"
+            onclick="shiftSchoolYear(-1)"
+            aria-label="Older year"
+          >
+            ‹
+          </button>
+          <select
+            id="schoolYearSelectNav"
+            class="school-year-nav-select"
+            onchange="onSchoolYearSelectChange(this)"
+            aria-label="Select year"
+          ></select>
+          <button
+            type="button"
+            id="schoolYearNextBtnNav"
+            class="school-year-nav-btn"
+            onclick="shiftSchoolYear(1)"
+            aria-label="Newer year"
+          >
+            ›
           </button>
         </div>
       </div>
@@ -813,7 +1042,7 @@
 
     <div class="max-w-5xl mx-auto mt-6">
       <!-- RESULTS PAGE -->
-      <div id="pageResults">
+      <div id="pageResults" class="hidden">
         <!-- Page Header -->
         <div class="text-center mb-8">
           <h2 class="site-page-title font-bold text-3xl mb-2">
@@ -1074,11 +1303,10 @@
         <!-- Page Header -->
         <div class="text-center mb-8">
           <h2 class="site-page-title font-bold text-3xl mb-2">
-            School Classification
+            School Results
           </h2>
           <p class="site-page-subtitle text-base">
-            Look up a school's conference, region, and district classification by
-            year
+            Look up a school's classification and competition results by year
           </p>
         </div>
 
@@ -1104,40 +1332,77 @@
           </div>
         </div>
 
-        <!-- All years classification display -->
-        <div id="classificationAllYears" class="hidden max-w-2xl mx-auto">
+        <!-- All years school results display -->
+        <div id="classificationAllYears" class="hidden max-w-4xl mx-auto">
           <div
             id="classificationSchoolTitle"
-            class="text-zinc-900 dark:text-white font-bold text-2xl mb-4 text-center"
+            class="text-zinc-900 dark:text-white font-bold text-2xl mb-4 text-center cursor-pointer"
+            onclick="showSchoolBrowseView()"
+            title="Back to all years"
           ></div>
 
-          <!-- Missing Years Alert -->
-          <div
-            id="missingYearsAlert"
-            class="missing-years-banner hidden text-center text-sm mb-4 p-3 rounded-lg"
-          >
-            Missing classification data for years: <span id="missingYearsText"></span>
+          <div id="classificationBrowseView">
+            <!-- Missing Years Alert -->
+            <div
+              id="missingYearsAlert"
+              class="missing-years-banner hidden text-center text-sm mb-4 p-3 rounded-lg"
+            >
+              No data for <span id="missingYearsText"></span>
+            </div>
+
+            <div id="classificationYearsContainer"></div>
           </div>
 
-          <!-- Classification table -->
-          <div class="glass-dark p-4 rounded-xl">
-            <table class="w-full">
-              <thead class="text-zinc-900 dark:text-white">
-                <tr>
-                  <th class="text-left py-2 px-3">Year</th>
-                  <th class="text-left py-2 px-3">Conference</th>
-                  <th class="text-left py-2 px-3">Region</th>
-                  <th class="text-left py-2 px-3">District</th>
-                </tr>
-              </thead>
-              <tbody id="classificationTableBody" class="text-zinc-800 dark:text-white/90"></tbody>
-            </table>
+          <div id="classificationYearDetail" class="hidden">
+            <div class="mb-4 flex items-center justify-start">
+              <div id="schoolYearNavInPage" class="school-year-nav" role="group" aria-label="Year navigation">
+                <button
+                  type="button"
+                  id="schoolYearPrevBtn"
+                  class="school-year-nav-btn"
+                  onclick="shiftSchoolYear(-1)"
+                  aria-label="Older year"
+                >
+                  ‹
+                </button>
+                <select
+                  id="schoolYearSelect"
+                  class="school-year-nav-select"
+                  onchange="onSchoolYearSelectChange(this)"
+                  aria-label="Select year"
+                ></select>
+                <button
+                  type="button"
+                  id="schoolYearNextBtn"
+                  class="school-year-nav-btn"
+                  onclick="shiftSchoolYear(1)"
+                  aria-label="Newer year"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+            <div class="glass-dark rounded-xl p-4 mb-4">
+              <div
+                id="classificationYearDetailHeading"
+                class="school-year-heading font-bold mb-1"
+              ></div>
+              <div
+                id="classificationYearDetailMeta"
+                class="person-year-event-count text-sm font-medium"
+              ></div>
+              <div
+                id="classificationYearDetailClass"
+                class="school-year-class text-xs mt-1"
+              ></div>
+            </div>
+            <div id="classificationYearEventsContainer"></div>
           </div>
         </div>
       </div>
 
       <!-- PERSON LOOKUP PAGE -->
-      <div id="pagePerson" class="hidden">
+      <div id="pagePerson">
         <!-- Page Header -->
         <div class="text-center mb-8">
           <h2 class="site-page-title font-bold text-3xl mb-2">

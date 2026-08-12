@@ -52,20 +52,6 @@ function refreshThemeDependentTables() {
             renderTeam(currentTeamData, currentViewType, isState, isMultiDistrict, isMultiRegion);
         }
     }
-    if (lastClassificationData && lastClassificationData.length) {
-        const wrap = document.getElementById('classificationAllYears');
-        const tbody = document.getElementById('classificationTableBody');
-        if (wrap && !wrap.classList.contains('hidden') && tbody) {
-            tbody.innerHTML = lastClassificationData.map((a, i) => `
-                <tr class="${i % 2 === 0 ? defaultRowStripeClass(true) : defaultRowStripeClass(false)}">
-                    <td class="py-2 px-3 font-semibold">${a.year}</td>
-                    <td class="py-2 px-3">${a.conference}</td>
-                    <td class="py-2 px-3">${a.region || '-'}</td>
-                    <td class="py-2 px-3">${a.district}</td>
-                </tr>
-            `).join('');
-        }
-    }
 }
 
 const MIN_YEAR = 2004;
@@ -83,6 +69,10 @@ let classificationSearchTimeout = null;
 let selectedSchoolName = null;
 let classificationResultsLoaded = false;
 let scrollToTarget = null;
+let highlightSchool = null;
+let lastSchoolPayload = null;
+let lastSchoolYearKey = null;
+let lastSchoolYearKeys = [];
 
 const DISTRICT_COLORS = [
     'rgba(255, 99, 132, 0.12)', 'rgba(54, 162, 235, 0.12)', 'rgba(255, 206, 86, 0.12)', 'rgba(75, 192, 192, 0.12)',
@@ -116,6 +106,7 @@ let _searchIndexPromise = null;
 let _classificationsPromise = null;
 let _sortedSchoolKeys = null;
 const _personShardCache = {};
+const _schoolShardCache = {};
 
 function loadMeta() {
     if (!_meta) _meta = fetch(`${DATA_BASE}/meta.json`).then(r => r.json());
@@ -137,6 +128,13 @@ function loadPersonShard(shard) {
         _personShardCache[shard] = fetch(`${DATA_BASE}/person/${shard}.json`).then(r => r.json());
     }
     return _personShardCache[shard];
+}
+
+function loadSchoolShard(shard) {
+    if (!_schoolShardCache[shard]) {
+        _schoolShardCache[shard] = fetch(`${DATA_BASE}/school/${shard}.json`).then(r => r.json());
+    }
+    return _schoolShardCache[shard];
 }
 
 // Must match slugify() in generate_static.py / app.py.
@@ -315,6 +313,7 @@ function init() {
 
     checkFormValidity();
     loadMeta();
+    showPage('person');
 }
 
 function checkFormValidity() {
@@ -357,6 +356,7 @@ function showPage(page) {
     if (page === 'results') {
         resultsPage.classList.remove('hidden');
         menuResults.classList.add('active');
+        updatePinnedSchoolYearNav();
     } else if (page === 'classification' || page === 'alignment') {
         classificationPage.classList.remove('hidden');
         menuClassification.classList.add('active');
@@ -367,6 +367,7 @@ function showPage(page) {
             ch.classList.add('hidden');
             document.getElementById('autocompleteDropdown').classList.remove('show');
             document.getElementById('classificationAllYears').classList.remove('hidden');
+            updatePinnedSchoolYearNav();
             return;
         }
 
@@ -376,9 +377,11 @@ function showPage(page) {
             ch.textContent = CLASSIFICATION_HINT_DEFAULT;
             ch.classList.remove('hidden');
         }
+        updatePinnedSchoolYearNav();
     } else if (page === 'person') {
         personPage.classList.remove('hidden');
         menuPerson.classList.add('active');
+        updatePinnedSchoolYearNav();
         const pq = personSearch.value.trim();
         const ph = document.getElementById('personHint');
 
@@ -416,6 +419,7 @@ async function searchSchools() {
     
     document.getElementById('classificationAllYears').classList.add('hidden');
     classificationResultsLoaded = false;
+    updatePinnedSchoolYearNav();
     
     if (query.length < 1) {
         hint.textContent = CLASSIFICATION_HINT_DEFAULT;
@@ -463,12 +467,13 @@ async function searchSchools() {
 async function selectSchoolAllYears(schoolName) {
     classificationSchool.value = schoolName;
     selectedSchoolName = schoolName;
+    lastSchoolYearKey = null;
     
     document.getElementById('autocompleteDropdown').classList.remove('show');
     document.getElementById('classificationHint').classList.add('hidden');
     
     try {
-        const classifications = await loadClassifications();
+        const [classifications, meta] = await Promise.all([loadClassifications(), loadMeta()]);
         const data = classifications[schoolName] || { classifications: [], alignments: [], missingYears: '', count: 0 };
         
         document.getElementById('classificationSchoolTitle').textContent = schoolName;
@@ -484,26 +489,293 @@ async function selectSchoolAllYears(schoolName) {
         } else {
             missingAlert.classList.add('hidden');
         }
-        
-        const tbody = document.getElementById('classificationTableBody');
-        if (classificationRows.length > 0) {
-            tbody.innerHTML = classificationRows.map((a, i) => `
-                <tr class="${i % 2 === 0 ? defaultRowStripeClass(true) : defaultRowStripeClass(false)}">
-                    <td class="py-2 px-3 font-semibold">${a.year}</td>
-                    <td class="py-2 px-3">${a.conference}</td>
-                    <td class="py-2 px-3">${a.region || '-'}</td>
-                    <td class="py-2 px-3">${a.district}</td>
-                </tr>
-            `).join('');
-        } else {
-            tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-zinc-500 dark:text-white/60">No classification data found</td></tr>';
+
+        let schoolPayload = { years: [], count: 0 };
+        const schoolShards = meta.schoolShards || 0;
+        if (schoolShards > 0) {
+            const shard = fnv1a(schoolName) % schoolShards;
+            const shardData = await loadSchoolShard(shard);
+            schoolPayload = shardData[schoolName] || schoolPayload;
         }
-        
+        lastSchoolPayload = schoolPayload;
+        lastSchoolYearKeys = collectSchoolYearKeys(classificationRows, schoolPayload);
+
+        const container = document.getElementById('classificationYearsContainer');
+        container.innerHTML = renderSchoolYears(classificationRows, schoolPayload);
+        showSchoolBrowseView();
+
         document.getElementById('classificationAllYears').classList.remove('hidden');
         classificationResultsLoaded = true;
     } catch (err) {
         console.error(err);
     }
+}
+
+function collectSchoolYearKeys(classificationRows, schoolPayload) {
+    const yearKeys = new Set();
+    for (const row of classificationRows || []) yearKeys.add(String(row.year));
+    for (const yearData of schoolPayload?.years || []) yearKeys.add(String(yearData.year));
+    return [...yearKeys].sort((a, b) => Number(a) - Number(b));
+}
+
+function showSchoolBrowseView() {
+    document.getElementById('classificationBrowseView')?.classList.remove('hidden');
+    document.getElementById('classificationYearDetail')?.classList.add('hidden');
+    lastSchoolYearKey = null;
+    updatePinnedSchoolYearNav();
+}
+
+function setSchoolYearNavState(yearKey) {
+    const years = lastSchoolYearKeys;
+    const options = years.map(y =>
+        `<option value="${escapeAttr(y)}"${y === String(yearKey) ? ' selected' : ''}>${escapeHtml(y)}</option>`
+    ).join('');
+    for (const select of document.querySelectorAll('#schoolYearSelect, #schoolYearSelectNav')) {
+        select.innerHTML = options;
+        select.value = String(yearKey);
+    }
+
+    const idx = years.indexOf(String(yearKey));
+    const atOldest = idx <= 0;
+    const atNewest = idx < 0 || idx >= years.length - 1;
+    for (const prevBtn of document.querySelectorAll('#schoolYearPrevBtn, #schoolYearPrevBtnNav')) {
+        prevBtn.disabled = atOldest;
+        prevBtn.setAttribute('aria-disabled', atOldest ? 'true' : 'false');
+    }
+    for (const nextBtn of document.querySelectorAll('#schoolYearNextBtn, #schoolYearNextBtnNav')) {
+        nextBtn.disabled = atNewest;
+        nextBtn.setAttribute('aria-disabled', atNewest ? 'true' : 'false');
+    }
+    updatePinnedSchoolYearNav();
+}
+
+function shiftSchoolYear(delta) {
+    const years = lastSchoolYearKeys;
+    const idx = years.indexOf(String(lastSchoolYearKey));
+    if (idx < 0) return;
+    const next = idx + delta;
+    if (next < 0 || next >= years.length) return;
+    openSchoolYear(years[next], { scroll: false });
+}
+
+function onSchoolYearSelectChange(el) {
+    const value = el?.value || document.getElementById('schoolYearSelect')?.value;
+    if (!value) return;
+    openSchoolYear(value, { scroll: false });
+}
+
+function isSchoolYearDetailVisible() {
+    const page = document.getElementById('pageClassification');
+    const allYears = document.getElementById('classificationAllYears');
+    const detail = document.getElementById('classificationYearDetail');
+    return !!(page && allYears && detail
+        && !page.classList.contains('hidden')
+        && !allYears.classList.contains('hidden')
+        && !detail.classList.contains('hidden'));
+}
+
+function updatePinnedSchoolYearNav() {
+    const bar = document.getElementById('navSchoolYearBar');
+    if (!bar) return;
+    if (!isSchoolYearDetailVisible()) {
+        bar.classList.remove('is-visible');
+        return;
+    }
+    const inPage = document.getElementById('schoolYearNavInPage');
+    const primary = document.querySelector('.nav-primary-row');
+    if (!inPage || !primary) {
+        bar.classList.remove('is-visible');
+        return;
+    }
+    const primaryBottom = primary.getBoundingClientRect().bottom;
+    const inPageBottom = inPage.getBoundingClientRect().bottom;
+    const visible = bar.classList.contains('is-visible');
+    const shouldShow = visible
+        ? inPageBottom <= primaryBottom + 28
+        : inPageBottom <= primaryBottom - 4;
+    bar.classList.toggle('is-visible', shouldShow);
+}
+
+function openSchoolYear(yearKey, opts = {}) {
+    const classByYear = {};
+    for (const row of lastClassificationData || []) {
+        classByYear[String(row.year)] = row;
+    }
+    const resultsByYear = {};
+    for (const yearData of lastSchoolPayload?.years || []) {
+        resultsByYear[String(yearData.year)] = yearData;
+    }
+
+    const classRow = classByYear[yearKey];
+    const yearData = resultsByYear[yearKey] || { year: yearKey, eventCount: 0, meetCount: 0, events: [] };
+    const eventCount = yearData.eventCount || (yearData.events || []).length;
+    const meetCount = yearData.meetCount || 0;
+    const eventLabel = eventCount === 1 ? '1 event' : `${eventCount} events`;
+    const meetLabel = meetCount === 1 ? '1 meet' : `${meetCount} meets`;
+
+    let conference = classRow?.conference;
+    let region = classRow?.region;
+    let district = classRow?.district;
+    if (!conference && yearData.events?.length) {
+        const firstMeet = yearData.events[0]?.meets?.[0];
+        conference = firstMeet?.conference || '-';
+    }
+    conference = conference || '-';
+    region = region || '-';
+    district = district || '-';
+
+    document.getElementById('classificationYearDetailHeading').textContent = yearKey;
+    document.getElementById('classificationYearDetailMeta').textContent = `${eventLabel}, ${meetLabel}`;
+    document.getElementById('classificationYearDetailClass').textContent =
+        `${conference} · Region ${region} · District ${district}`;
+
+    const eventsContainer = document.getElementById('classificationYearEventsContainer');
+    eventsContainer.innerHTML = (yearData.events || []).length
+        ? yearData.events.map(renderSchoolEvent).join('')
+        : '<div class="text-sm text-orange-900/70 dark:text-white/50 py-2">No competition results for this year</div>';
+
+    document.getElementById('classificationBrowseView').classList.add('hidden');
+    document.getElementById('classificationYearDetail').classList.remove('hidden');
+    lastSchoolYearKey = String(yearKey);
+    setSchoolYearNavState(yearKey);
+    if (opts.scroll !== false) {
+        document.getElementById('classificationYearDetail').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function escapeAttr(value) {
+    return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;');
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderSchoolYears(classificationRows, schoolPayload) {
+    const classByYear = {};
+    for (const row of classificationRows || []) {
+        classByYear[String(row.year)] = row;
+    }
+    const resultsByYear = {};
+    for (const yearData of schoolPayload.years || []) {
+        resultsByYear[String(yearData.year)] = yearData;
+    }
+
+    const yearKeys = new Set([
+        ...Object.keys(classByYear),
+        ...Object.keys(resultsByYear),
+    ]);
+    const years = [...yearKeys].sort((a, b) => Number(b) - Number(a));
+
+    if (years.length === 0) {
+        return '<div class="text-center text-orange-900/75 dark:text-white/60 py-8">No classification or results found for this school</div>';
+    }
+
+    const chips = years.map(yearKey => {
+        const classRow = classByYear[yearKey];
+        const yearData = resultsByYear[yearKey] || { year: yearKey, eventCount: 0, meetCount: 0, events: [] };
+        const eventCount = yearData.eventCount || (yearData.events || []).length;
+        const meetCount = yearData.meetCount || 0;
+        const eventLabel = eventCount === 1 ? '1 event' : `${eventCount} events`;
+        const meetLabel = meetCount === 1 ? '1 meet' : `${meetCount} meets`;
+
+        let conference = classRow?.conference;
+        let region = classRow?.region;
+        let district = classRow?.district;
+        if (!conference && yearData.events?.length) {
+            const firstMeet = yearData.events[0]?.meets?.[0];
+            conference = firstMeet?.conference || '-';
+        }
+        conference = conference || '-';
+        region = region || '-';
+        district = district || '-';
+
+        return `
+        <button type="button" class="school-year-chip glass-dark"
+                onclick="openSchoolYear('${escapeAttr(yearKey)}')">
+            <span class="school-year-heading font-bold">${escapeHtml(yearKey)}</span>
+            <span class="person-year-event-count text-xs font-medium">${eventLabel}, ${meetLabel}</span>
+            <span class="school-year-class text-[11px] leading-snug">${escapeHtml(conference)} · R${escapeHtml(region)} · D${escapeHtml(district)}</span>
+        </button>`;
+    }).join('');
+
+    return `<div class="school-years-grid">${chips}</div>`;
+}
+
+function renderSchoolEvent(eventData) {
+    const meetCount = eventData.meetCount || (eventData.meets || []).length;
+    const meetLabel = meetCount === 1 ? '1 meet' : `${meetCount} meets`;
+    const meetsHtml = (eventData.meets || []).map(renderSchoolMeet).join('');
+
+    return `
+    <div class="glass-dark rounded-xl mb-3 p-2">
+        <details class="school-event-details">
+            <summary class="school-event-summary px-3 py-3 cursor-pointer select-none">
+                <span class="person-line-title font-semibold text-base min-w-0 truncate">${escapeHtml(eventData.event)}</span>
+                <span class="flex items-center gap-2 shrink-0">
+                    <span class="person-year-event-count text-sm font-medium">${meetLabel}</span>
+                    <span class="person-year-chevron" aria-hidden="true">›</span>
+                </span>
+            </summary>
+            <div class="school-event-content px-2 pb-3 pt-2 grid gap-2">
+                ${meetsHtml || '<div class="text-sm text-orange-900/70 dark:text-white/50 px-2">No meets</div>'}
+            </div>
+        </details>
+    </div>`;
+}
+
+function renderSchoolMeet(meet) {
+    const district = meet.district || '';
+    const region = meet.region || '';
+    const school = selectedSchoolName || '';
+    const onclick = `event.stopPropagation(); goToResults('${escapeAttr(meet.year)}', '${escapeAttr(meet.conference)}', '${escapeAttr(meet.eventCode)}', '${escapeAttr(meet.viewType)}', '${escapeAttr(district)}', '${escapeAttr(region)}', null, '${escapeAttr(school)}')`;
+
+    const indivHtml = (meet.indiv || []).map(indiv => {
+        const advance = indiv.advance
+            ? `<span class="school-meet-advance text-green-700 dark:text-green-400 text-[10px] font-bold uppercase">→ ${escapeHtml(indiv.advance)}</span>`
+            : `<span class="school-meet-advance"></span>`;
+        return `
+            <div class="school-meet-row text-sm">
+                <span class="person-line-level truncate min-w-0">${escapeHtml(indiv.name || indiv.name_raw)}</span>
+                ${advance}
+                <span class="school-meet-place person-placement font-bold">${escapeHtml(indiv.place || '-')}</span>
+                <span class="school-meet-score person-line-level font-medium">${escapeHtml(indiv.score || '-')}</span>
+            </div>`;
+    }).join('');
+
+    let teamHtml = '';
+    if (meet.team) {
+        const members = meet.team.members
+            ? `<div class="text-xs person-year-event-types mt-1 truncate">${escapeHtml(meet.team.members)}</div>`
+            : '';
+        teamHtml = `
+            <div class="mt-2 pt-2 border-t border-stone-300/40 dark:border-white/10">
+                <div class="school-meet-row text-sm">
+                    <span class="person-line-title font-semibold">Team</span>
+                    <span class="school-meet-advance"></span>
+                    <span class="school-meet-place person-placement font-bold">${escapeHtml(meet.team.place || '-')}</span>
+                    <span class="school-meet-score person-line-level font-medium">${escapeHtml(meet.team.score || '-')}</span>
+                </div>
+                ${members}
+            </div>`;
+    }
+
+    return `
+    <div class="school-meet-card person-result-card rounded-lg p-3 cursor-pointer transition-colors"
+         onclick="${onclick}">
+        <div class="person-line-level font-medium mb-2">${escapeHtml(meet.level)}</div>
+        <div class="grid gap-1.5">
+            ${indivHtml || '<div class="text-sm text-orange-900/70 dark:text-white/50">No individual results</div>'}
+        </div>
+        ${teamHtml}
+    </div>`;
 }
 
 
@@ -700,8 +972,9 @@ async function selectPerson(name, school) {
     }
 }
 
-function goToResults(year, conference, competition, viewType, district, region, targetName) {
-    if (targetName) scrollToTarget = targetName;
+function goToResults(year, conference, competition, viewType, district, region, targetName, targetSchool) {
+    scrollToTarget = targetName || null;
+    highlightSchool = targetSchool || null;
     
     showPage('results');
     
@@ -723,12 +996,69 @@ function goToResults(year, conference, competition, viewType, district, region, 
     document.getElementById('lookupForm').dispatchEvent(new Event('submit'));
 }
 
+function rowMatchesHighlight(row, { nameMode = false, schoolMode = false } = {}) {
+    if (schoolMode && highlightSchool) {
+        const school = row['School Name'] || row.School || '';
+        return school === highlightSchool;
+    }
+    if (nameMode && scrollToTarget) {
+        const nameField = row['Team Members'] || row.Entry || '';
+        return nameField === scrollToTarget;
+    }
+    return false;
+}
+
+function rowMatchesTeamHighlight(row) {
+    if (highlightSchool) {
+        const school = row['School Name'] || row.School || '';
+        return school === highlightSchool;
+    }
+    if (scrollToTarget) {
+        const members = row['Team Members'] || '';
+        return members.includes(scrollToTarget);
+    }
+    return false;
+}
+
+function scheduleHighlightFocus(hasIndivTargets, hasTeamTargets) {
+    if (!hasIndivTargets && !hasTeamTargets) {
+        scrollToTarget = null;
+        highlightSchool = null;
+        return;
+    }
+    setTimeout(() => {
+        const indivEl = document.getElementById('targetRow');
+        const teamEl = document.getElementById('targetRowTeam');
+        const focusEl = indivEl || teamEl;
+        if (focusEl) {
+            focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        const targets = document.querySelectorAll('.indiv-team-tbody tr.results-row-target');
+        setTimeout(() => {
+            targets.forEach(el => fadeTargetRow(el));
+            scrollToTarget = null;
+            highlightSchool = null;
+        }, 2800);
+    }, 250);
+}
+
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.autocomplete-container')) {
         document.getElementById('autocompleteDropdown')?.classList.remove('show');
         document.getElementById('personDropdown')?.classList.remove('show');
     }
 });
+
+let _schoolYearNavPinRaf = 0;
+function schedulePinnedSchoolYearNav() {
+    if (_schoolYearNavPinRaf) return;
+    _schoolYearNavPinRaf = requestAnimationFrame(() => {
+        _schoolYearNavPinRaf = 0;
+        updatePinnedSchoolYearNav();
+    });
+}
+window.addEventListener('scroll', schedulePinnedSchoolYearNav, { passive: true });
+window.addEventListener('resize', schedulePinnedSchoolYearNav);
 
 function handleViewTypeChange() {
     const vt = viewTypeSelect.value;
@@ -818,7 +1148,10 @@ async function handleSubmit(e) {
             missingAlert.classList.remove('hidden');
         }
 
-        scrollToLookupResults();
+        // Prefer highlight scroll when jumping from person/school; otherwise scroll to results.
+        if (!scrollToTarget && !highlightSchool) {
+            scrollToLookupResults();
+        }
     } catch (err) {
         console.error(err);
     }
@@ -933,6 +1266,12 @@ function displayResults(data, viewType, competition) {
             noTeamAlert.classList.add('hidden');
         }
     }
+
+    if (scrollToTarget || highlightSchool) {
+        const hasIndivTargets = !!document.querySelector('#indivBody tr.results-row-target');
+        const hasTeamTargets = !!document.querySelector('#teamBody tr.results-row-target');
+        scheduleHighlightFocus(hasIndivTargets, hasTeamTargets);
+    }
 }
 
 function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMultiRegion) {
@@ -958,18 +1297,24 @@ function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMult
     document.getElementById('indivHead').innerHTML = h;
     
     let b = '';
-    let foundTarget = false;
+    let firstTarget = true;
     
     data.forEach((row, i) => {
         const nameField = row['Team Members'] || row.Entry || '';
         
-        let isTarget = false;
-        if (scrollToTarget && nameField === scrollToTarget) {
-            isTarget = true;
-            foundTarget = true;
-        }
+        const isTarget = rowMatchesHighlight(row, {
+            nameMode: !!scrollToTarget && !highlightSchool,
+            schoolMode: !!highlightSchool,
+        });
         
-        const rowAttrs = buildResultsRowAttrs(row, i, viewType, isTarget, isTarget ? 'targetRow' : '');
+        const rowAttrs = buildResultsRowAttrs(
+            row,
+            i,
+            viewType,
+            isTarget,
+            isTarget && firstTarget ? 'targetRow' : ''
+        );
+        if (isTarget && firstTarget) firstTarget = false;
         
         let name = nameField || '-';
         let school = row['School Name'] || row.School || '-';
@@ -994,17 +1339,6 @@ function renderIndiv(data, viewType, isScience, isState, isMultiDistrict, isMult
         b += '</tr>';
     });
     document.getElementById('indivBody').innerHTML = b;
-    
-    if (foundTarget) {
-        setTimeout(() => {
-            const el = document.getElementById('targetRow');
-            if (el) {
-                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => fadeTargetRow(el), 2000);
-            }
-            scrollToTarget = null;
-        }, 300);
-    }
 }
 
 function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
@@ -1021,19 +1355,21 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
     document.getElementById('teamHead').innerHTML = h;
     
     let b = '';
-    let foundTarget = false;
+    let firstTarget = true;
     
     data.forEach((row, i) => {
         let school = row['School Name'] || '-';
         
-        let members = row['Team Members'] || '';
-        let isTarget = false;
-        if (scrollToTarget && members.includes(scrollToTarget)) {
-            isTarget = true;
-            foundTarget = true;
-        }
+        const isTarget = rowMatchesTeamHighlight(row);
 
-        const rowAttrs = buildResultsRowAttrs(row, i, viewType, isTarget, isTarget ? 'targetRowTeam' : '');
+        const rowAttrs = buildResultsRowAttrs(
+            row,
+            i,
+            viewType,
+            isTarget,
+            isTarget && firstTarget ? 'targetRowTeam' : ''
+        );
+        if (isTarget && firstTarget) firstTarget = false;
         
         if (isMultiDistrict && row.OriginalPlace && row.District) {
             school += `<div class="text-[10px] opacity-60">${row.OriginalPlace} in D${row.District}</div>`;
@@ -1049,22 +1385,6 @@ function renderTeam(data, viewType, isState, isMultiDistrict, isMultiRegion) {
         b += '</tr>';
     });
     document.getElementById('teamBody').innerHTML = b;
-    
-    if (foundTarget) {
-        setTimeout(() => {
-            const indivEl = document.getElementById('targetRow');
-            const teamEl = document.getElementById('targetRowTeam');
-            
-            if (!indivEl && teamEl) {
-                teamEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                scrollToTarget = null;
-            }
-            
-            if (teamEl) {
-                setTimeout(() => fadeTargetRow(teamEl), 2000);
-            }
-        }, 300);
-    }
 }
 
 function sortIndivBy(field) {
